@@ -1,3 +1,6 @@
+# Luarocks path for amalg and other tools
+LUAROCKS_PATH := $(shell luarocks path --lr-path 2>/dev/null)
+
 # Default target
 .PHONY: all
 all: format lint test build
@@ -22,12 +25,11 @@ test-matrix-%:
 test-%:
 	./run_tests.sh $*
 
-
 build/amalg.cache: src/bitn/init.lua
 	@echo "Generating amalgamation cache..."
 	@mkdir -p build
 	@if command -v amalg.lua >/dev/null 2>&1; then \
-		LUA_PATH="./src/?.lua;./src/?/init.lua;$(LUA_PATH)" lua -lamalg src/bitn/init.lua && mv amalg.cache build || exit 1; \
+		LUA_PATH="./?.lua;./?/init.lua;./src/?.lua;./src/?/init.lua;$(LUAROCKS_PATH)" lua -lamalg src/bitn/init.lua && mv amalg.cache build || exit 1; \
 		echo "Generated amalg.cache"; \
 	else \
 		echo "Error: amalg not found."; \
@@ -41,7 +43,7 @@ build/amalg.cache: src/bitn/init.lua
 build: build/amalg.cache
 	@echo "Building single-file distribution..."
 	@if command -v amalg.lua >/dev/null 2>&1; then \
-		LUA_PATH="./src/?.lua;./src/?/init.lua;$(LUA_PATH)" amalg.lua -o build/bitn.lua -C ./build/amalg.cache || exit 1;\
+		LUA_PATH="./?.lua;./?/init.lua;./src/?.lua;./src/?/init.lua;$(LUAROCKS_PATH)" amalg.lua -o build/bitn.lua -C ./build/amalg.cache || exit 1;\
 		echo "Built build/bitn.lua"; \
 		VERSION=$$(git describe --exact-match --tags 2>/dev/null || echo "dev"); \
 		if [ "$$VERSION" != "dev" ]; then \

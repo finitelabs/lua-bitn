@@ -42,8 +42,8 @@ echo
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Add repository root to Lua's package path
-# This allows require() to find modules in the src/tests directories
-lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/tests/?.lua;$LUA_PATH"
+# This allows require() to find modules in the src/vendor directories
+lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
 default_modules=("bit16" "bit32" "bit64")
