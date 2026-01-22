@@ -151,7 +151,7 @@ function bit16.arshift(a, n)
   -- If original was negative, fill high bits with 1s
   if is_negative then
     -- Create mask for high bits that need to be 1
-    local fill_mask = MASK16 - (math.pow(2, 16 - n) - 1)
+    local fill_mask = MASK16 - (math.floor(2 ^ (16 - n)) - 1)
     result = bit16.bor(result, fill_mask)
   end
 
@@ -417,15 +417,20 @@ function bit16.selftest()
     else
       print("  FAIL: " .. test.name)
       if type(test.expected) == "string" then
-        local exp_hex, got_hex = "", ""
-        for i = 1, #test.expected do
-          exp_hex = exp_hex .. string.format("%02X", string.byte(test.expected, i))
+        if type(result) ~= "string" then
+          print("    Expected: string")
+          print("    Got:      " .. type(result))
+        else
+          local exp_hex, got_hex = "", ""
+          for i = 1, #test.expected do
+            exp_hex = exp_hex .. string.format("%02X", string.byte(test.expected, i))
+          end
+          for i = 1, #result do
+            got_hex = got_hex .. string.format("%02X", string.byte(result, i))
+          end
+          print("    Expected: " .. exp_hex)
+          print("    Got:      " .. got_hex)
         end
-        for i = 1, #result do
-          got_hex = got_hex .. string.format("%02X", string.byte(result, i))
-        end
-        print("    Expected: " .. exp_hex)
-        print("    Got:      " .. got_hex)
       else
         print(string.format("    Expected: 0x%04X", test.expected))
         print(string.format("    Got:      0x%04X", result))
