@@ -274,6 +274,55 @@ function bit64.le_bytes_to_u64(str, offset)
 end
 
 --------------------------------------------------------------------------------
+-- Utility functions
+--------------------------------------------------------------------------------
+
+--- Converts a {high, low} pair to a 16-character hexadecimal string.
+--- @param value Int64HighLow The {high_32, low_32} pair.
+--- @return string hex The hexadecimal string (e.g., "0000180000001000").
+function bit64.to_hex(value)
+  return string.format("%08X%08X", value[1], value[2])
+end
+
+--- Converts a {high, low} pair to a Lua number.
+--- Warning: Lua numbers use 64-bit IEEE 754 doubles with 53-bit mantissa precision.
+--- Values exceeding 53 bits (greater than 9007199254740991) will lose precision.
+--- To maintain full 64-bit precision, keep values in {high, low} format.
+--- @param value Int64HighLow The {high_32, low_32} pair.
+--- @param strict? boolean If true, errors when value exceeds 53-bit precision.
+--- @return number result The value as a Lua number (may lose precision for large values unless strict).
+function bit64.to_number(value, strict)
+  if strict and value[1] > 0x001FFFFF then
+    error("Value exceeds 53-bit precision (max: 9007199254740991)", 2)
+  end
+  return value[1] * 0x100000000 + value[2]
+end
+
+--- Creates a {high, low} pair from a Lua number.
+--- @param value number The number to convert.
+--- @return Int64HighLow pair The {high_32, low_32} pair.
+function bit64.from_number(value)
+  local low = value % 0x100000000
+  local high = math.floor(value / 0x100000000)
+  return bit64.new(high, low)
+end
+
+--- Checks if two {high, low} pairs are equal.
+--- @param a Int64HighLow The first {high_32, low_32} pair.
+--- @param b Int64HighLow The second {high_32, low_32} pair.
+--- @return boolean equal True if the values are equal.
+function bit64.eq(a, b)
+  return a[1] == b[1] and a[2] == b[2]
+end
+
+--- Checks if a {high, low} pair is zero.
+--- @param value Int64HighLow The {high_32, low_32} pair.
+--- @return boolean is_zero True if the value is zero.
+function bit64.is_zero(value)
+  return value[1] == 0 and value[2] == 0
+end
+
+--------------------------------------------------------------------------------
 -- Aliases for compatibility
 --------------------------------------------------------------------------------
 
@@ -579,6 +628,90 @@ function bit64.selftest()
       inputs = { string.char(0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x12) },
       expected = { 0x12345678, 0x9ABCDEF0 },
     },
+
+    -- to_hex tests
+    {
+      name = "to_hex({0x00001800, 0x00001000})",
+      fn = bit64.to_hex,
+      inputs = { { 0x00001800, 0x00001000 } },
+      expected = "0000180000001000",
+    },
+    {
+      name = "to_hex({0xFFFFFFFF, 0xFFFFFFFF})",
+      fn = bit64.to_hex,
+      inputs = { { 0xFFFFFFFF, 0xFFFFFFFF } },
+      expected = "FFFFFFFFFFFFFFFF",
+    },
+    {
+      name = "to_hex({0x00000000, 0x00000000})",
+      fn = bit64.to_hex,
+      inputs = { { 0x00000000, 0x00000000 } },
+      expected = "0000000000000000",
+    },
+
+    -- to_number tests
+    {
+      name = "to_number({0x00000000, 0x00000001})",
+      fn = bit64.to_number,
+      inputs = { { 0x00000000, 0x00000001 } },
+      expected = 1,
+    },
+    {
+      name = "to_number({0x00000000, 0xFFFFFFFF})",
+      fn = bit64.to_number,
+      inputs = { { 0x00000000, 0xFFFFFFFF } },
+      expected = 4294967295,
+    },
+    {
+      name = "to_number({0x00000001, 0x00000000})",
+      fn = bit64.to_number,
+      inputs = { { 0x00000001, 0x00000000 } },
+      expected = 4294967296,
+    },
+
+    -- from_number tests
+    {
+      name = "from_number(1)",
+      fn = bit64.from_number,
+      inputs = { 1 },
+      expected = { 0x00000000, 0x00000001 },
+    },
+    {
+      name = "from_number(4294967296)",
+      fn = bit64.from_number,
+      inputs = { 4294967296 },
+      expected = { 0x00000001, 0x00000000 },
+    },
+    {
+      name = "from_number(0)",
+      fn = bit64.from_number,
+      inputs = { 0 },
+      expected = { 0x00000000, 0x00000000 },
+    },
+
+    -- eq tests
+    { name = "eq({1,2}, {1,2})", fn = bit64.eq, inputs = { { 1, 2 }, { 1, 2 } }, expected = true },
+    { name = "eq({1,2}, {1,3})", fn = bit64.eq, inputs = { { 1, 2 }, { 1, 3 } }, expected = false },
+    { name = "eq({1,2}, {2,2})", fn = bit64.eq, inputs = { { 1, 2 }, { 2, 2 } }, expected = false },
+
+    -- is_zero tests
+    { name = "is_zero({0,0})", fn = bit64.is_zero, inputs = { { 0, 0 } }, expected = true },
+    { name = "is_zero({0,1})", fn = bit64.is_zero, inputs = { { 0, 1 } }, expected = false },
+    { name = "is_zero({1,0})", fn = bit64.is_zero, inputs = { { 1, 0 } }, expected = false },
+
+    -- to_number strict mode tests (values within 53-bit range)
+    {
+      name = "to_number({0x001FFFFF, 0xFFFFFFFF}, true) -- max 53-bit",
+      fn = bit64.to_number,
+      inputs = { { 0x001FFFFF, 0xFFFFFFFF }, true },
+      expected = 9007199254740991,
+    },
+    {
+      name = "to_number({0, 1}, true)",
+      fn = bit64.to_number,
+      inputs = { { 0, 1 }, true },
+      expected = 1,
+    },
   }
 
   for _, test in ipairs(test_vectors) do
@@ -750,6 +883,24 @@ function bit64.selftest()
       passed = passed + 1
     else
       print("  FAIL: " .. op.name .. "() returns Int64")
+    end
+  end
+
+  -- Test to_number strict mode error case
+  print("\nRunning to_number strict mode tests...")
+  total = total + 1
+  local ok, err = pcall(function()
+    bit64.to_number({ 0x00200000, 0x00000000 }, true) -- 2^53, exceeds 53-bit
+  end)
+  if not ok and string.find(err, "53%-bit precision") then
+    print("  PASS: to_number strict mode errors on values > 53 bits")
+    passed = passed + 1
+  else
+    print("  FAIL: to_number strict mode errors on values > 53 bits")
+    if ok then
+      print("    Expected error but got success")
+    else
+      print("    Expected '53-bit precision' error but got: " .. tostring(err))
     end
   end
 
