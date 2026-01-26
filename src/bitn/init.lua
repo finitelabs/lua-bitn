@@ -20,8 +20,11 @@
 ---
 --- @class bitn
 local bitn = {
+  --- @type bit16
   bit16 = require("bitn.bit16"),
+  --- @type bit32
   bit32 = require("bitn.bit32"),
+  --- @type bit64
   bit64 = require("bitn.bit64"),
 }
 
