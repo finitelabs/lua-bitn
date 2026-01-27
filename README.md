@@ -52,12 +52,12 @@ local negated = bit16.bnot(0xFF00)             -- 0x00FF
 
 -- 64-bit operations (using {high, low} pairs)
 local bit64 = bitn.bit64
-local a = {0x00000001, 0xFFFFFFFF}             -- 0x1FFFFFFFF
-local b = {0x00000000, 0x00000001}             -- 0x1
+local a = bit64.new(0x00000001, 0xFFFFFFFF)    -- 0x1FFFFFFFF
+local b = bit64.new(0x00000000, 0x00000001)    -- 0x1
 local sum = bit64.add(a, b)                    -- {0x00000002, 0x00000000}
 local xored = bit64.bxor(
-  {0x12345678, 0x9ABCDEF0},
-  {0x12345678, 0x9ABCDEF0}
+  bit64.new(0x12345678, 0x9ABCDEF0),
+  bit64.new(0x12345678, 0x9ABCDEF0)
 )                                               -- {0, 0}
 ```
 
