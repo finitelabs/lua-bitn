@@ -18,9 +18,13 @@
 --- -- 16-bit operations
 --- local shifted = bitn.bit16.lshift(1, 8)  -- 256
 ---
+--- @class bitn
 local bitn = {
+  --- @type bitn.bit16 16-bit bitwise operations
   bit16 = require("bitn.bit16"),
+  --- @type bitn.bit32 32-bit bitwise operations
   bit32 = require("bitn.bit32"),
+  --- @type bitn.bit64 64-bit bitwise operations
   bit64 = require("bitn.bit64"),
 }
 

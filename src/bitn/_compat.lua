@@ -1,6 +1,8 @@
+--- @diagnostic disable: duplicate-set-field
 --- @module "bitn._compat"
 --- Internal compatibility layer for bitwise operations.
 --- Provides feature detection and optimized primitives for use by bit16/bit32/bit64.
+--- @class bitn._compat
 local _compat = {}
 
 --------------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 --- @module "bitn.utils.benchmark"
 --- Common benchmarking utilities for performance testing
+--- @class bitn.utils.benchmark
 local benchmark = {}
 
 --- Run a benchmarked operation with warmup and timing
