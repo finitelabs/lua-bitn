@@ -6,6 +6,7 @@
 lua-bitn/
 ├── src/bitn/
 │   ├── init.lua      # Module aggregator, exports bit16/bit32/bit64
+│   ├── _compat.lua   # Internal compatibility layer, feature detection
 │   ├── bit16.lua     # 16-bit bitwise operations
 │   ├── bit32.lua     # 32-bit bitwise operations
 │   ├── bit64.lua     # 64-bit bitwise operations (uses {high, low} pairs)
@@ -72,10 +73,16 @@ Each bit module (bit16, bit32, bit64) provides the same API:
 local value = {0x12345678, 0x9ABCDEF0}
 ```
 
-### Pure Lua Implementation
+### Compatibility Layer (_compat)
 
-All operations are implemented using basic Lua arithmetic to ensure
-compatibility across all Lua versions without native bit library dependencies.
+The `_compat` module provides automatic feature detection and optimized primitives:
+- **Lua 5.3+**: Uses native bitwise operators (`&`, `|`, `~`, `<<`, `>>`)
+- **Lua 5.2**: Uses built-in `bit32` library
+- **LuaJIT**: Uses `bit` library with signed-to-unsigned conversion
+- **Lua 5.1**: Falls back to pure Lua arithmetic implementation
+
+This ensures optimal performance on modern Lua while maintaining compatibility
+with older versions.
 
 ## Testing
 

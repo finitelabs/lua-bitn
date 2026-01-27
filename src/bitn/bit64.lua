@@ -1,13 +1,27 @@
 --- @module "bitn.bit64"
---- Pure Lua 64-bit bitwise operations library.
+--- 64-bit bitwise operations library.
 --- This module provides 64-bit bitwise operations using {high, low} pairs,
 --- where high is the upper 32 bits and low is the lower 32 bits.
---- Works across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT without depending on
---- any built-in bit libraries.
---- @class bit64
+--- Works across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
+--- Uses native bit operations where available for optimal performance.
 local bit64 = {}
 
 local bit32 = require("bitn.bit32")
+local _compat = require("bitn._compat")
+local impl_name = _compat.impl_name
+
+-- Cache bit32 methods as locals for faster access
+local bit32_band = bit32.band
+local bit32_bor = bit32.bor
+local bit32_bxor = bit32.bxor
+local bit32_bnot = bit32.bnot
+local bit32_lshift = bit32.lshift
+local bit32_rshift = bit32.rshift
+local bit32_arshift = bit32.arshift
+local bit32_u32_to_be_bytes = bit32.u32_to_be_bytes
+local bit32_u32_to_le_bytes = bit32.u32_to_le_bytes
+local bit32_be_bytes_to_u32 = bit32.be_bytes_to_u32
+local bit32_le_bytes_to_u32 = bit32.le_bytes_to_u32
 
 -- Private metatable for Int64 type identification
 local Int64Meta = { __name = "Int64" }
@@ -43,7 +57,7 @@ end
 --- @param b Int64HighLow Second operand {high, low}
 --- @return Int64HighLow result {high, low} AND result
 function bit64.band(a, b)
-  return bit64.new(bit32.band(a[1], b[1]), bit32.band(a[2], b[2]))
+  return bit64.new(bit32_band(a[1], b[1]), bit32_band(a[2], b[2]))
 end
 
 --- Bitwise OR operation.
@@ -51,7 +65,7 @@ end
 --- @param b Int64HighLow Second operand {high, low}
 --- @return Int64HighLow result {high, low} OR result
 function bit64.bor(a, b)
-  return bit64.new(bit32.bor(a[1], b[1]), bit32.bor(a[2], b[2]))
+  return bit64.new(bit32_bor(a[1], b[1]), bit32_bor(a[2], b[2]))
 end
 
 --- Bitwise XOR operation.
@@ -59,14 +73,14 @@ end
 --- @param b Int64HighLow Second operand {high, low}
 --- @return Int64HighLow result {high, low} XOR result
 function bit64.bxor(a, b)
-  return bit64.new(bit32.bxor(a[1], b[1]), bit32.bxor(a[2], b[2]))
+  return bit64.new(bit32_bxor(a[1], b[1]), bit32_bxor(a[2], b[2]))
 end
 
 --- Bitwise NOT operation.
 --- @param a Int64HighLow Operand {high, low}
 --- @return Int64HighLow result {high, low} NOT result
 function bit64.bnot(a)
-  return bit64.new(bit32.bnot(a[1]), bit32.bnot(a[2]))
+  return bit64.new(bit32_bnot(a[1]), bit32_bnot(a[2]))
 end
 
 --------------------------------------------------------------------------------
@@ -84,11 +98,11 @@ function bit64.lshift(x, n)
     return bit64.new(0, 0)
   elseif n >= 32 then
     -- Shift by 32 or more: low becomes 0, high gets bits from low
-    return bit64.new(bit32.lshift(x[2], n - 32), 0)
+    return bit64.new(bit32_lshift(x[2], n - 32), 0)
   else
     -- Shift by less than 32
-    local new_high = bit32.bor(bit32.lshift(x[1], n), bit32.rshift(x[2], 32 - n))
-    local new_low = bit32.lshift(x[2], n)
+    local new_high = bit32_bor(bit32_lshift(x[1], n), bit32_rshift(x[2], 32 - n))
+    local new_low = bit32_lshift(x[2], n)
     return bit64.new(new_high, new_low)
   end
 end
@@ -104,11 +118,11 @@ function bit64.rshift(x, n)
     return bit64.new(0, 0)
   elseif n >= 32 then
     -- Shift by 32 or more: high becomes 0, low gets bits from high
-    return bit64.new(0, bit32.rshift(x[1], n - 32))
+    return bit64.new(0, bit32_rshift(x[1], n - 32))
   else
     -- Shift by less than 32
-    local new_low = bit32.bor(bit32.rshift(x[2], n), bit32.lshift(x[1], 32 - n))
-    local new_high = bit32.rshift(x[1], n)
+    local new_low = bit32_bor(bit32_rshift(x[2], n), bit32_lshift(x[1], 32 - n))
+    local new_high = bit32_rshift(x[1], n)
     return bit64.new(new_high, new_low)
   end
 end
@@ -123,7 +137,7 @@ function bit64.arshift(x, n)
   end
 
   -- Check sign bit (bit 31 of high word)
-  local is_negative = bit32.band(x[1], 0x80000000) ~= 0
+  local is_negative = bit32_band(x[1], 0x80000000) ~= 0
 
   if n >= 64 then
     -- All bits shift out, result is all 1s if negative, all 0s if positive
@@ -134,13 +148,13 @@ function bit64.arshift(x, n)
     end
   elseif n >= 32 then
     -- High word shifts into low, high fills with sign
-    local new_low = bit32.arshift(x[1], n - 32)
+    local new_low = bit32_arshift(x[1], n - 32)
     local new_high = is_negative and 0xFFFFFFFF or 0
     return bit64.new(new_high, new_low)
   else
     -- Shift by less than 32
-    local new_low = bit32.bor(bit32.rshift(x[2], n), bit32.lshift(x[1], 32 - n))
-    local new_high = bit32.arshift(x[1], n)
+    local new_low = bit32_bor(bit32_rshift(x[2], n), bit32_lshift(x[1], 32 - n))
+    local new_high = bit32_arshift(x[1], n)
     return bit64.new(new_high, new_low)
   end
 end
@@ -166,14 +180,14 @@ function bit64.rol(x, n)
     return bit64.new(low, high)
   elseif n < 32 then
     -- Rotate within 32-bit boundaries
-    local new_high = bit32.bor(bit32.lshift(high, n), bit32.rshift(low, 32 - n))
-    local new_low = bit32.bor(bit32.lshift(low, n), bit32.rshift(high, 32 - n))
+    local new_high = bit32_bor(bit32_lshift(high, n), bit32_rshift(low, 32 - n))
+    local new_low = bit32_bor(bit32_lshift(low, n), bit32_rshift(high, 32 - n))
     return bit64.new(new_high, new_low)
   else
     -- n > 32: rotate by (n - 32) after swapping
     n = n - 32
-    local new_high = bit32.bor(bit32.lshift(low, n), bit32.rshift(high, 32 - n))
-    local new_low = bit32.bor(bit32.lshift(high, n), bit32.rshift(low, 32 - n))
+    local new_high = bit32_bor(bit32_lshift(low, n), bit32_rshift(high, 32 - n))
+    local new_low = bit32_bor(bit32_lshift(high, n), bit32_rshift(low, 32 - n))
     return bit64.new(new_high, new_low)
   end
 end
@@ -195,14 +209,14 @@ function bit64.ror(x, n)
     return bit64.new(low, high)
   elseif n < 32 then
     -- Rotate within 32-bit boundaries
-    local new_low = bit32.bor(bit32.rshift(low, n), bit32.lshift(high, 32 - n))
-    local new_high = bit32.bor(bit32.rshift(high, n), bit32.lshift(low, 32 - n))
+    local new_low = bit32_bor(bit32_rshift(low, n), bit32_lshift(high, 32 - n))
+    local new_high = bit32_bor(bit32_rshift(high, n), bit32_lshift(low, 32 - n))
     return bit64.new(new_high, new_low)
   else
     -- n > 32: rotate by (n - 32) after swapping
     n = n - 32
-    local new_low = bit32.bor(bit32.rshift(high, n), bit32.lshift(low, 32 - n))
-    local new_high = bit32.bor(bit32.rshift(low, n), bit32.lshift(high, 32 - n))
+    local new_low = bit32_bor(bit32_rshift(high, n), bit32_lshift(low, 32 - n))
+    local new_high = bit32_bor(bit32_rshift(low, n), bit32_lshift(high, 32 - n))
     return bit64.new(new_high, new_low)
   end
 end
@@ -239,14 +253,14 @@ end
 --- @param x Int64HighLow 64-bit value {high, low}
 --- @return string bytes 8-byte string in big-endian order
 function bit64.u64_to_be_bytes(x)
-  return bit32.u32_to_be_bytes(x[1]) .. bit32.u32_to_be_bytes(x[2])
+  return bit32_u32_to_be_bytes(x[1]) .. bit32_u32_to_be_bytes(x[2])
 end
 
 --- Convert 64-bit value to 8 bytes (little-endian).
 --- @param x Int64HighLow 64-bit value {high, low}
 --- @return string bytes 8-byte string in little-endian order
 function bit64.u64_to_le_bytes(x)
-  return bit32.u32_to_le_bytes(x[2]) .. bit32.u32_to_le_bytes(x[1])
+  return bit32_u32_to_le_bytes(x[2]) .. bit32_u32_to_le_bytes(x[1])
 end
 
 --- Convert 8 bytes to 64-bit value (big-endian).
@@ -256,8 +270,8 @@ end
 function bit64.be_bytes_to_u64(str, offset)
   offset = offset or 1
   assert(#str >= offset + 7, "Insufficient bytes for u64")
-  local high = bit32.be_bytes_to_u32(str, offset)
-  local low = bit32.be_bytes_to_u32(str, offset + 4)
+  local high = bit32_be_bytes_to_u32(str, offset)
+  local low = bit32_be_bytes_to_u32(str, offset + 4)
   return bit64.new(high, low)
 end
 
@@ -268,8 +282,8 @@ end
 function bit64.le_bytes_to_u64(str, offset)
   offset = offset or 1
   assert(#str >= offset + 7, "Insufficient bytes for u64")
-  local low = bit32.le_bytes_to_u32(str, offset)
-  local high = bit32.le_bytes_to_u32(str, offset + 4)
+  local low = bit32_le_bytes_to_u32(str, offset)
+  local high = bit32_le_bytes_to_u32(str, offset + 4)
   return bit64.new(high, low)
 end
 
@@ -384,6 +398,7 @@ end
 --- @return boolean result True if all tests pass, false otherwise
 function bit64.selftest()
   print("Running 64-bit operations test vectors...")
+  print(string.format("  Using: %s", impl_name()))
   local passed = 0
   local total = 0
 
@@ -941,9 +956,10 @@ local benchmark_op = require("bitn.utils.benchmark").benchmark_op
 
 --- Run performance benchmarks for 64-bit operations.
 function bit64.benchmark()
-  local iterations = 1000000
+  local iterations = 100000
 
   print("64-bit Bitwise Operations:")
+  print(string.format("  Implementation: %s", impl_name()))
 
   -- Test values
   local a = bit64.new(0xAAAAAAAA, 0x55555555)

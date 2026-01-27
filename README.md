@@ -1,13 +1,14 @@
 # lua-bitn
 
-A pure Lua implementation of bitwise operations for 16-bit, 32-bit, and 64-bit
-integers with **zero external dependencies**. This library provides a complete,
-portable implementation that runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
+A portable bitwise operations library for 16-bit, 32-bit, and 64-bit integers
+with **zero external dependencies**. This library provides a complete,
+cross-platform implementation that runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
 
 ## Features
 
-- **Zero Dependencies**: Pure Lua implementation, no C extensions or external
-  libraries required
+- **Zero Dependencies**: No C extensions or external libraries required
+- **Automatic Optimization**: Uses native bit operations when available (Lua 5.2+
+  bit32 library, Lua 5.3+ operators, LuaJIT bit library) with pure Lua fallback
 - **Portable**: Runs on any Lua interpreter (5.1+)
 - **Complete**: Full bitwise operations API for 16-bit, 32-bit, and 64-bit integers
 - **Byte Conversions**: Big-endian and little-endian byte string conversions
@@ -125,7 +126,7 @@ make help                # Show all available targets
 
 ## Current Limitations
 
-- Pure Lua performance is slower than native bit libraries
+- Pure Lua fallback (Lua 5.1 without LuaJIT) is slower than native bit libraries
 - No constant-time guarantees
 
 ## License

@@ -1,19 +1,35 @@
 --- @module "bitn.bit16"
---- Pure Lua 16-bit bitwise operations library.
+--- 16-bit bitwise operations library.
 --- This module provides a complete, version-agnostic implementation of 16-bit
---- bitwise operations that works across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT
---- without depending on any built-in bit libraries.
---- @class bit16
+--- bitwise operations that works across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
+--- Uses native bit operations where available for optimal performance.
 local bit16 = {}
+
+local _compat = require("bitn._compat")
+
+-- Cache methods as locals for faster access
+local compat_band = _compat.band
+local compat_bor = _compat.bor
+local compat_bxor = _compat.bxor
+local compat_bnot = _compat.bnot
+local compat_lshift = _compat.lshift
+local compat_rshift = _compat.rshift
+local impl_name = _compat.impl_name
 
 -- 16-bit mask constant
 local MASK16 = 0xFFFF
+
+local math_floor = math.floor
+
+--------------------------------------------------------------------------------
+-- Core operations
+--------------------------------------------------------------------------------
 
 --- Ensure value fits in 16-bit unsigned integer.
 --- @param n number Input value
 --- @return integer result 16-bit unsigned integer (0 to 0xFFFF)
 function bit16.mask(n)
-  return math.floor(n % 0x10000)
+  return compat_band(math_floor(n), MASK16)
 end
 
 --- Bitwise AND operation.
@@ -21,26 +37,7 @@ end
 --- @param b integer Second operand (16-bit)
 --- @return integer result Result of a AND b
 function bit16.band(a, b)
-  a = bit16.mask(a)
-  b = bit16.mask(b)
-
-  local result = 0
-  local bit_val = 1
-
-  for _ = 0, 15 do
-    if (a % 2 == 1) and (b % 2 == 1) then
-      result = result + bit_val
-    end
-    a = math.floor(a / 2)
-    b = math.floor(b / 2)
-    bit_val = bit_val * 2
-
-    if a == 0 and b == 0 then
-      break
-    end
-  end
-
-  return result
+  return compat_band(compat_band(a, MASK16), compat_band(b, MASK16))
 end
 
 --- Bitwise OR operation.
@@ -48,26 +45,7 @@ end
 --- @param b integer Second operand (16-bit)
 --- @return integer result Result of a OR b
 function bit16.bor(a, b)
-  a = bit16.mask(a)
-  b = bit16.mask(b)
-
-  local result = 0
-  local bit_val = 1
-
-  for _ = 0, 15 do
-    if (a % 2 == 1) or (b % 2 == 1) then
-      result = result + bit_val
-    end
-    a = math.floor(a / 2)
-    b = math.floor(b / 2)
-    bit_val = bit_val * 2
-
-    if a == 0 and b == 0 then
-      break
-    end
-  end
-
-  return result
+  return compat_band(compat_bor(a, b), MASK16)
 end
 
 --- Bitwise XOR operation.
@@ -75,33 +53,14 @@ end
 --- @param b integer Second operand (16-bit)
 --- @return integer result Result of a XOR b
 function bit16.bxor(a, b)
-  a = bit16.mask(a)
-  b = bit16.mask(b)
-
-  local result = 0
-  local bit_val = 1
-
-  for _ = 0, 15 do
-    if (a % 2) ~= (b % 2) then
-      result = result + bit_val
-    end
-    a = math.floor(a / 2)
-    b = math.floor(b / 2)
-    bit_val = bit_val * 2
-
-    if a == 0 and b == 0 then
-      break
-    end
-  end
-
-  return result
+  return compat_band(compat_bxor(a, b), MASK16)
 end
 
 --- Bitwise NOT operation.
 --- @param a integer Operand (16-bit)
 --- @return integer result Result of NOT a
 function bit16.bnot(a)
-  return bit16.mask(MASK16 - bit16.mask(a))
+  return compat_band(compat_bnot(a), MASK16)
 end
 
 --- Left shift operation.
@@ -113,7 +72,7 @@ function bit16.lshift(a, n)
   if n >= 16 then
     return 0
   end
-  return bit16.mask(bit16.mask(a) * math.pow(2, n))
+  return compat_band(compat_lshift(compat_band(a, MASK16), n), MASK16)
 end
 
 --- Logical right shift operation (fills with 0s).
@@ -122,11 +81,10 @@ end
 --- @return integer result Result of a >> n (logical)
 function bit16.rshift(a, n)
   assert(n >= 0, "Shift amount must be non-negative")
-  a = bit16.mask(a)
   if n >= 16 then
     return 0
   end
-  return math.floor(a / math.pow(2, n))
+  return compat_rshift(compat_band(a, MASK16), n)
 end
 
 --- Arithmetic right shift operation (sign-extending, fills with sign bit).
@@ -135,27 +93,25 @@ end
 --- @return integer result Result of a >> n with sign extension
 function bit16.arshift(a, n)
   assert(n >= 0, "Shift amount must be non-negative")
-  a = bit16.mask(a)
+  a = compat_band(a, MASK16)
 
   -- Check if sign bit is set (bit 15)
   local is_negative = a >= 0x8000
 
   if n >= 16 then
-    -- All bits shift out, result is all 1s if negative, all 0s if positive
-    return is_negative and 0xFFFF or 0
+    return is_negative and MASK16 or 0
   end
 
-  -- Perform logical right shift first
-  local result = math.floor(a / math.pow(2, n))
+  -- Perform logical right shift
+  local result = compat_rshift(a, n)
 
   -- If original was negative, fill high bits with 1s
   if is_negative then
-    -- Create mask for high bits that need to be 1
-    local fill_mask = MASK16 - (math.floor(2 ^ (16 - n)) - 1)
-    result = bit16.bor(result, fill_mask)
+    local fill_mask = compat_band(compat_lshift(MASK16, 16 - n), MASK16)
+    result = compat_bor(result, fill_mask)
   end
 
-  return result
+  return compat_band(result, MASK16)
 end
 
 --- Left rotate operation.
@@ -164,8 +120,8 @@ end
 --- @return integer result Result of rotating x left by n positions
 function bit16.rol(x, n)
   n = n % 16
-  x = bit16.mask(x)
-  return bit16.mask(bit16.lshift(x, n) + bit16.rshift(x, 16 - n))
+  x = compat_band(x, MASK16)
+  return compat_band(compat_bor(compat_lshift(x, n), compat_rshift(x, 16 - n)), MASK16)
 end
 
 --- Right rotate operation.
@@ -174,8 +130,8 @@ end
 --- @return integer result Result of rotating x right by n positions
 function bit16.ror(x, n)
   n = n % 16
-  x = bit16.mask(x)
-  return bit16.mask(bit16.rshift(x, n) + bit16.lshift(x, 16 - n))
+  x = compat_band(x, MASK16)
+  return compat_band(compat_bor(compat_rshift(x, n), compat_lshift(x, 16 - n)), MASK16)
 end
 
 --- 16-bit addition with overflow handling.
@@ -183,27 +139,30 @@ end
 --- @param b integer Second operand (16-bit)
 --- @return integer result Result of (a + b) mod 2^16
 function bit16.add(a, b)
-  return bit16.mask(bit16.mask(a) + bit16.mask(b))
+  return compat_band(compat_band(a, MASK16) + compat_band(b, MASK16), MASK16)
 end
 
 --------------------------------------------------------------------------------
 -- Byte conversion functions
 --------------------------------------------------------------------------------
 
+local string_char = string.char
+local string_byte = string.byte
+
 --- Convert 16-bit unsigned integer to 2 bytes (big-endian).
 --- @param n integer 16-bit unsigned integer
 --- @return string bytes 2-byte string in big-endian order
 function bit16.u16_to_be_bytes(n)
-  n = bit16.mask(n)
-  return string.char(math.floor(n / 256), n % 256)
+  n = compat_band(n, MASK16)
+  return string_char(math_floor(n / 256), n % 256)
 end
 
 --- Convert 16-bit unsigned integer to 2 bytes (little-endian).
 --- @param n integer 16-bit unsigned integer
 --- @return string bytes 2-byte string in little-endian order
 function bit16.u16_to_le_bytes(n)
-  n = bit16.mask(n)
-  return string.char(n % 256, math.floor(n / 256))
+  n = compat_band(n, MASK16)
+  return string_char(n % 256, math_floor(n / 256))
 end
 
 --- Convert 2 bytes to 16-bit unsigned integer (big-endian).
@@ -213,7 +172,7 @@ end
 function bit16.be_bytes_to_u16(str, offset)
   offset = offset or 1
   assert(#str >= offset + 1, "Insufficient bytes for u16")
-  local b1, b2 = string.byte(str, offset, offset + 1)
+  local b1, b2 = string_byte(str, offset, offset + 1)
   return b1 * 256 + b2
 end
 
@@ -224,7 +183,7 @@ end
 function bit16.le_bytes_to_u16(str, offset)
   offset = offset or 1
   assert(#str >= offset + 1, "Insufficient bytes for u16")
-  local b1, b2 = string.byte(str, offset, offset + 1)
+  local b1, b2 = string_byte(str, offset, offset + 1)
   return b1 + b2 * 256
 end
 
@@ -239,6 +198,7 @@ local unpack_fn = unpack or table.unpack
 --- @return boolean result True if all tests pass, false otherwise
 function bit16.selftest()
   print("Running 16-bit operations test vectors...")
+  print(string.format("  Using: %s", impl_name()))
   local passed = 0
   local total = 0
 
@@ -450,9 +410,10 @@ local benchmark_op = require("bitn.utils.benchmark").benchmark_op
 
 --- Run performance benchmarks for 16-bit operations.
 function bit16.benchmark()
-  local iterations = 1000000
+  local iterations = 100000
 
   print("16-bit Bitwise Operations:")
+  print(string.format("  Implementation: %s", impl_name()))
 
   -- Test values
   local a, b = 0xAAAA, 0x5555
