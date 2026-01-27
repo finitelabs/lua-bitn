@@ -4,6 +4,7 @@
 --- where high is the upper 32 bits and low is the lower 32 bits.
 --- Works across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
 --- Uses native bit operations where available for optimal performance.
+--- @class bitn.bit64
 local bit64 = {}
 
 local bit32 = require("bitn.bit32")

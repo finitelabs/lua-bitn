@@ -3,6 +3,7 @@
 --- This module provides a complete, version-agnostic implementation of 32-bit
 --- bitwise operations that works across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
 --- Uses native bit operations where available for optimal performance.
+--- @class bitn.bit32
 local bit32 = {}
 
 local _compat = require("bitn._compat")
