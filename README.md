@@ -1,13 +1,14 @@
 # lua-bitn
 
-A pure Lua implementation of bitwise operations for 16-bit, 32-bit, and 64-bit
-integers with **zero external dependencies**. This library provides a complete,
-portable implementation that runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
+A portable bitwise operations library for 16-bit, 32-bit, and 64-bit integers
+with **zero external dependencies**. This library provides a complete,
+cross-platform implementation that runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
 
 ## Features
 
-- **Zero Dependencies**: Pure Lua implementation, no C extensions or external
-  libraries required
+- **Zero Dependencies**: No C extensions or external libraries required
+- **Automatic Optimization**: Uses native bit operations when available (Lua 5.2+
+  bit32 library, Lua 5.3+ operators, LuaJIT bit library) with pure Lua fallback
 - **Portable**: Runs on any Lua interpreter (5.1+)
 - **Complete**: Full bitwise operations API for 16-bit, 32-bit, and 64-bit integers
 - **Byte Conversions**: Big-endian and little-endian byte string conversions
@@ -68,27 +69,64 @@ local xored = bit64.bxor(
 
 Example: `0x123456789ABCDEF0` is represented as `{0x12345678, 0x9ABCDEF0}`
 
-## Testing
+## Development
 
-Run the test suite:
+### Setup
 
 ```bash
-# Run all tests with default Lua interpreter
-./run_tests.sh
+# Install development dependencies (stylua, luacheck, amalg)
+make install-deps
+```
 
-# Run with specific Lua version
+### Testing
+
+```bash
+make test                # Run all tests
+make test-bit32          # Run specific module tests
+make test-matrix         # Run tests across all Lua versions
+make test-matrix-bit32   # Run specific module across all Lua versions
+
+# Or use scripts directly with custom Lua binary
 LUA_BINARY=lua5.1 ./run_tests.sh
+```
 
-# Run specific module
-./run_tests.sh bit32
+### Benchmarking
 
-# Run test matrix across all Lua versions
-./run_tests_matrix.sh
+```bash
+make bench               # Run all benchmarks
+make bench-bit32         # Run specific module benchmark
+make bench-matrix        # Run benchmarks across all Lua versions
+make bench-matrix-bit64  # Run specific module across all Lua versions
+
+# Or use scripts directly with custom Lua binary
+LUA_BINARY=lua5.4 ./run_benchmarks.sh
+```
+
+### Code Quality
+
+```bash
+make check               # Run format check and lint
+make format              # Format code with stylua
+make format-check        # Check formatting without modifying
+make lint                # Run luacheck
+```
+
+### Building
+
+```bash
+make build               # Build single-file distribution (build/bitn.lua)
+make clean               # Remove generated files
+```
+
+### Help
+
+```bash
+make help                # Show all available targets
 ```
 
 ## Current Limitations
 
-- Pure Lua performance is slower than native bit libraries
+- Pure Lua fallback (Lua 5.1 without LuaJIT) is slower than native bit libraries
 - No constant-time guarantees
 
 ## License

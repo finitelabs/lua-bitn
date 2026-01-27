@@ -1,9 +1,9 @@
 --- @module "bitn"
---- Pure Lua bitwise operations library.
+--- Portable bitwise operations library with automatic optimization.
 --- This library provides standalone, version-agnostic implementations of
 --- bitwise operations for 16-bit, 32-bit, and 64-bit integers. It works
---- across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT without depending on any
---- built-in bit libraries.
+--- across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero external dependencies.
+--- Automatically uses native bit operations when available for optimal performance.
 ---
 --- @usage
 --- local bitn = require("bitn")
@@ -18,13 +18,9 @@
 --- -- 16-bit operations
 --- local shifted = bitn.bit16.lshift(1, 8)  -- 256
 ---
---- @class bitn
 local bitn = {
-  --- @type bit16
   bit16 = require("bitn.bit16"),
-  --- @type bit32
   bit32 = require("bitn.bit32"),
-  --- @type bit64
   bit64 = require("bitn.bit64"),
 }
 

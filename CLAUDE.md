@@ -6,9 +6,13 @@
 lua-bitn/
 ├── src/bitn/
 │   ├── init.lua      # Module aggregator, exports bit16/bit32/bit64
+│   ├── _compat.lua   # Internal compatibility layer, feature detection
 │   ├── bit16.lua     # 16-bit bitwise operations
 │   ├── bit32.lua     # 32-bit bitwise operations
-│   └── bit64.lua     # 64-bit bitwise operations (uses {high, low} pairs)
+│   ├── bit64.lua     # 64-bit bitwise operations (uses {high, low} pairs)
+│   └── utils/
+│       ├── init.lua      # Utils module aggregator
+│       └── benchmark.lua # Benchmarking utilities
 ├── tests/
 │   ├── test_bit16.lua    # 16-bit test vectors
 │   ├── test_bit32.lua    # 32-bit test vectors
@@ -18,6 +22,7 @@ lua-bitn/
 │   └── release.yml   # Release automation
 ├── run_tests.sh      # Main test runner
 ├── run_tests_matrix.sh   # Multi-version test runner
+├── run_benchmarks.sh # Benchmark runner
 └── Makefile          # Build automation
 ```
 
@@ -32,6 +37,12 @@ make test-bit32
 
 # Run across Lua versions
 make test-matrix
+
+# Run benchmarks
+make bench
+
+# Run specific module benchmark
+make bench-bit32
 
 # Format code
 make format
@@ -62,10 +73,16 @@ Each bit module (bit16, bit32, bit64) provides the same API:
 local value = {0x12345678, 0x9ABCDEF0}
 ```
 
-### Pure Lua Implementation
+### Compatibility Layer (_compat)
 
-All operations are implemented using basic Lua arithmetic to ensure
-compatibility across all Lua versions without native bit library dependencies.
+The `_compat` module provides automatic feature detection and optimized primitives:
+- **Lua 5.3+**: Uses native bitwise operators (`&`, `|`, `~`, `<<`, `>>`)
+- **Lua 5.2**: Uses built-in `bit32` library
+- **LuaJIT**: Uses `bit` library with signed-to-unsigned conversion
+- **Lua 5.1**: Falls back to pure Lua arithmetic implementation
+
+This ensures optimal performance on modern Lua while maintaining compatibility
+with older versions.
 
 ## Testing
 
@@ -79,6 +96,29 @@ local test_vectors = {
 ```
 
 Run with: `./run_tests.sh` or `make test`
+
+## Benchmarking
+
+Each module includes a `benchmark()` function that measures performance of all
+operations. Benchmarks use the `bitn.utils.benchmark` module for consistent
+timing and output formatting.
+
+```bash
+# Run all benchmarks (uses LuaJIT by default for best performance)
+./run_benchmarks.sh or `make bench`
+
+# Run with specific Lua version
+LUA_BINARY=lua5.4 ./run_benchmarks.sh
+
+# Run specific module
+./run_benchmarks.sh bit32
+make bench-bit64
+```
+
+The benchmark utility performs:
+- 3 warmup iterations before timing
+- Configurable iteration count (default: 100, modules use 10000)
+- Reports ms/op and ops/sec metrics
 
 ## Building
 
