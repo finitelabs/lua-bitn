@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# Lua bitN Library - Test Matrix Runner
-# Runs tests across multiple Lua versions using luaenv
+# Lua bitN Library - Benchmark Matrix Runner
+# Runs benchmarks across multiple Lua versions using luaenv
 #
-# Usage: ./run_tests_matrix.sh [module_names...]
+# Usage: ./run_benchmarks_matrix.sh [module_names...]
 #
 # Examples:
-#   ./run_tests_matrix.sh                   # Run all tests on all versions
-#   ./run_tests_matrix.sh bit32             # Run bit32 tests on all versions
-#   ./run_tests_matrix.sh bit32 bit64       # Run specific tests on all versions
+#   ./run_benchmarks_matrix.sh                   # Run all benchmarks on all versions
+#   ./run_benchmarks_matrix.sh bit32             # Run bit32 benchmarks on all versions
+#   ./run_benchmarks_matrix.sh bit32 bit64       # Run specific benchmarks on all versions
 
-# List of luaenv versions to test
+# List of luaenv versions to benchmark
 LUA_VERSIONS=("5.1.5" "5.2.4" "5.3.6" "5.4.8" "luajit-2.1-dev")
 
 # Colors for output
@@ -40,7 +40,7 @@ passed_versions=()
 
 for lua_version in "${LUA_VERSIONS[@]}"; do
     echo -e "${yellow}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${nc}"
-    echo -e "${yellow}Running tests with $lua_version${nc}"
+    echo -e "${yellow}Running benchmarks with $lua_version${nc}"
     echo -e "${yellow}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${nc}"
     echo
 
@@ -48,8 +48,8 @@ for lua_version in "${LUA_VERSIONS[@]}"; do
     lua_prefix="$($luaenv_binary prefix $lua_version)"
     lua_binary="$lua_prefix/bin/lua"
 
-    # Run the tests and pass all arguments
-    if ! LUA_BINARY="$lua_binary" "$script_dir/run_tests.sh" "$@"; then
+    # Run the benchmarks and pass all arguments
+    if ! LUA_BINARY="$lua_binary" "$script_dir/run_benchmarks.sh" "$@"; then
         failed_versions+=("$lua_version")
     else
         passed_versions+=("$lua_version")
@@ -58,11 +58,11 @@ done
 
 # Final summary
 echo "============================================="
-echo "📊 Matrix Test Summary"
+echo "📊 Matrix Benchmark Summary"
 echo "============================================="
 
 if [ ${#failed_versions[@]} -eq 0 ]; then
-    echo -e "${green}✅ All LUA VERSIONS PASSED:${nc}"
+    echo -e "${green}✅ All LUA VERSIONS COMPLETED:${nc}"
     printf '%s\n' "${passed_versions[@]}"
     exit 0
 else

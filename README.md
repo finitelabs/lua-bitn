@@ -68,22 +68,59 @@ local xored = bit64.bxor(
 
 Example: `0x123456789ABCDEF0` is represented as `{0x12345678, 0x9ABCDEF0}`
 
-## Testing
+## Development
 
-Run the test suite:
+### Setup
 
 ```bash
-# Run all tests with default Lua interpreter
-./run_tests.sh
+# Install development dependencies (stylua, luacheck, amalg)
+make install-deps
+```
 
-# Run with specific Lua version
+### Testing
+
+```bash
+make test                # Run all tests
+make test-bit32          # Run specific module tests
+make test-matrix         # Run tests across all Lua versions
+make test-matrix-bit32   # Run specific module across all Lua versions
+
+# Or use scripts directly with custom Lua binary
 LUA_BINARY=lua5.1 ./run_tests.sh
+```
 
-# Run specific module
-./run_tests.sh bit32
+### Benchmarking
 
-# Run test matrix across all Lua versions
-./run_tests_matrix.sh
+```bash
+make bench               # Run all benchmarks
+make bench-bit32         # Run specific module benchmark
+make bench-matrix        # Run benchmarks across all Lua versions
+make bench-matrix-bit64  # Run specific module across all Lua versions
+
+# Or use scripts directly with custom Lua binary
+LUA_BINARY=lua5.4 ./run_benchmarks.sh
+```
+
+### Code Quality
+
+```bash
+make check               # Run format check and lint
+make format              # Format code with stylua
+make format-check        # Check formatting without modifying
+make lint                # Run luacheck
+```
+
+### Building
+
+```bash
+make build               # Build single-file distribution (build/bitn.lua)
+make clean               # Remove generated files
+```
+
+### Help
+
+```bash
+make help                # Show all available targets
 ```
 
 ## Current Limitations
