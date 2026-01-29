@@ -97,6 +97,33 @@ if ok and result then
       return native_band(r, MASK32)
     end
 
+    -- Raw operations provide direct access to native bit functions without the
+    -- to_unsigned() wrapper. On Lua 5.3+, these are identical to wrapped versions
+    -- since native operators already return unsigned values.
+    -- Shifts must mask to 32 bits since native operators work on 64-bit values.
+    _compat.raw_band = native_band
+    _compat.raw_bor = native_bor
+    _compat.raw_bxor = native_bxor
+    _compat.raw_bnot = function(a)
+      return native_band(native_bnot(a), MASK32)
+    end
+    _compat.raw_lshift = function(a, n)
+      if n >= 32 then
+        return 0
+      end
+      return native_band(native_lshift(a, n), MASK32)
+    end
+    _compat.raw_rshift = function(a, n)
+      if n >= 32 then
+        return 0
+      end
+      return native_rshift(native_band(a, MASK32), n)
+    end
+    _compat.raw_arshift = _compat.arshift
+    -- No native rol/ror on Lua 5.3+
+    _compat.raw_rol = nil
+    _compat.raw_ror = nil
+
     return _compat
   end
 end
@@ -218,6 +245,25 @@ if bit_lib then
     end
   end
 
+  -- Raw operations provide direct access to native bit functions without the
+  -- to_unsigned() wrapper. On LuaJIT, these return signed 32-bit integers.
+  -- On Lua 5.2 (bit32 library), these are identical to wrapped versions.
+  _compat.raw_band = bit_band
+  _compat.raw_bor = bit_bor
+  _compat.raw_bxor = bit_bxor
+  _compat.raw_bnot = bit_bnot
+  _compat.raw_lshift = bit_lshift
+  _compat.raw_rshift = bit_rshift
+  _compat.raw_arshift = bit_arshift
+  -- rol/ror only available on LuaJIT (bit library), not Lua 5.2 (bit32 library)
+  if bit_lib.rol then
+    _compat.raw_rol = bit_lib.rol
+    _compat.raw_ror = bit_lib.ror
+  else
+    _compat.raw_rol = nil
+    _compat.raw_ror = nil
+  end
+
   return _compat
 end
 
@@ -316,5 +362,17 @@ function _compat.arshift(a, n)
   end
   return r
 end
+
+-- Raw operations for pure Lua fallback are identical to wrapped versions
+-- since there's no native library to bypass.
+_compat.raw_band = _compat.band
+_compat.raw_bor = _compat.bor
+_compat.raw_bxor = _compat.bxor
+_compat.raw_bnot = _compat.bnot
+_compat.raw_lshift = _compat.lshift
+_compat.raw_rshift = _compat.rshift
+_compat.raw_arshift = _compat.arshift
+_compat.raw_rol = nil
+_compat.raw_ror = nil
 
 return _compat

@@ -84,6 +84,22 @@ The `_compat` module provides automatic feature detection and optimized primitiv
 This ensures optimal performance on modern Lua while maintaining compatibility
 with older versions.
 
+### Raw Operations (bit32 and bit64)
+
+The bit32 and bit64 modules provide `raw_*` variants for performance-critical code:
+- `raw_band`, `raw_bor`, `raw_bxor`, `raw_bnot`
+- `raw_lshift`, `raw_rshift`, `raw_arshift`
+- `raw_rol`, `raw_ror`
+- `raw_add`
+
+These bypass the `to_unsigned()` wrapper used on LuaJIT, returning signed
+integers when the high bit is set. On other platforms they behave identically
+to regular operations. Use for crypto code and tight loops where the sign
+interpretation doesn't matter.
+
+Note: Shift amounts >= 32 (or >= 64 for bit64) have platform-specific behavior
+in raw functions. Callers should keep shift amounts in valid range.
+
 ## Testing
 
 Tests use Lua table-based vectors for easy maintenance:
