@@ -9,20 +9,27 @@ local bit64 = {}
 
 local bit32 = require("bitn.bit32")
 local _compat = require("bitn._compat")
-local impl_name = _compat.impl_name
 
--- Cache bit32 methods as locals for faster access
+-- Cache methods as locals for faster access
+local bit32_arshift = bit32.arshift
 local bit32_band = bit32.band
+local bit32_be_bytes_to_u32 = bit32.be_bytes_to_u32
+local bit32_bnot = bit32.bnot
 local bit32_bor = bit32.bor
 local bit32_bxor = bit32.bxor
-local bit32_bnot = bit32.bnot
+local bit32_le_bytes_to_u32 = bit32.le_bytes_to_u32
 local bit32_lshift = bit32.lshift
+local bit32_raw_arshift = bit32.raw_arshift
+local bit32_raw_band = bit32.raw_band
+local bit32_raw_bnot = bit32.raw_bnot
+local bit32_raw_bor = bit32.raw_bor
+local bit32_raw_bxor = bit32.raw_bxor
+local bit32_raw_lshift = bit32.raw_lshift
+local bit32_raw_rshift = bit32.raw_rshift
 local bit32_rshift = bit32.rshift
-local bit32_arshift = bit32.arshift
 local bit32_u32_to_be_bytes = bit32.u32_to_be_bytes
 local bit32_u32_to_le_bytes = bit32.u32_to_le_bytes
-local bit32_be_bytes_to_u32 = bit32.be_bytes_to_u32
-local bit32_le_bytes_to_u32 = bit32.le_bytes_to_u32
+local impl_name = _compat.impl_name
 
 -- Private metatable for Int64 type identification
 local Int64Meta = { __name = "Int64" }
@@ -35,11 +42,21 @@ local Int64Meta = { __name = "Int64" }
 --------------------------------------------------------------------------------
 
 --- Create a new Int64 value with metatable marker.
+--- Normalizes signed 32-bit values to unsigned (for LuaJIT raw_* compatibility).
 --- @param high? integer Upper 32 bits (default: 0)
 --- @param low? integer Lower 32 bits (default: 0)
 --- @return Int64HighLow value Int64 value with metatable marker
 function bit64.new(high, low)
-  return setmetatable({ high or 0, low or 0 }, Int64Meta)
+  high = high or 0
+  low = low or 0
+  -- Normalize signed to unsigned (handles LuaJIT raw_* results)
+  if high < 0 then
+    high = high + 0x100000000
+  end
+  if low < 0 then
+    low = low + 0x100000000
+  end
+  return setmetatable({ high, low }, Int64Meta)
 end
 
 --- Check if a value is an Int64 (created by bit64 functions).
@@ -372,6 +389,178 @@ bit64.asr = bit64.arshift
 
 --- Alias for is_int64 (compatibility with older API).
 bit64.isInt64 = bit64.is_int64
+
+--------------------------------------------------------------------------------
+-- Raw (zero-overhead) operations
+--------------------------------------------------------------------------------
+-- These functions use bit32.raw_* internally for performance-critical code.
+-- On LuaJIT, the internal 32-bit values may be signed, but bit patterns are correct.
+-- Use for crypto code and tight loops where sign interpretation doesn't matter.
+
+--- Raw bitwise AND (uses bit32.raw_band internally).
+--- @param a Int64HighLow First operand {high, low}
+--- @param b Int64HighLow Second operand {high, low}
+--- @return Int64HighLow result {high, low} AND result
+function bit64.raw_band(a, b)
+  return bit64.new(bit32_raw_band(a[1], b[1]), bit32_raw_band(a[2], b[2]))
+end
+
+--- Raw bitwise OR (uses bit32.raw_bor internally).
+--- @param a Int64HighLow First operand {high, low}
+--- @param b Int64HighLow Second operand {high, low}
+--- @return Int64HighLow result {high, low} OR result
+function bit64.raw_bor(a, b)
+  return bit64.new(bit32_raw_bor(a[1], b[1]), bit32_raw_bor(a[2], b[2]))
+end
+
+--- Raw bitwise XOR (uses bit32.raw_bxor internally).
+--- @param a Int64HighLow First operand {high, low}
+--- @param b Int64HighLow Second operand {high, low}
+--- @return Int64HighLow result {high, low} XOR result
+function bit64.raw_bxor(a, b)
+  return bit64.new(bit32_raw_bxor(a[1], b[1]), bit32_raw_bxor(a[2], b[2]))
+end
+
+--- Raw bitwise NOT (uses bit32.raw_bnot internally).
+--- @param a Int64HighLow Operand {high, low}
+--- @return Int64HighLow result {high, low} NOT result
+function bit64.raw_bnot(a)
+  return bit64.new(bit32_raw_bnot(a[1]), bit32_raw_bnot(a[2]))
+end
+
+--- Raw left shift (uses bit32.raw_* internally).
+--- @param x Int64HighLow Value to shift {high, low}
+--- @param n integer Number of positions to shift (must be >= 0)
+--- @return Int64HighLow result {high, low} shifted value
+function bit64.raw_lshift(x, n)
+  if n == 0 then
+    return bit64.new(x[1], x[2])
+  elseif n >= 64 then
+    return bit64.new(0, 0)
+  elseif n >= 32 then
+    return bit64.new(bit32_raw_lshift(x[2], n - 32), 0)
+  else
+    local new_high = bit32_raw_bor(bit32_raw_lshift(x[1], n), bit32_raw_rshift(x[2], 32 - n))
+    local new_low = bit32_raw_lshift(x[2], n)
+    return bit64.new(new_high, new_low)
+  end
+end
+
+--- Raw logical right shift (uses bit32.raw_* internally).
+--- @param x Int64HighLow Value to shift {high, low}
+--- @param n integer Number of positions to shift (must be >= 0)
+--- @return Int64HighLow result {high, low} shifted value
+function bit64.raw_rshift(x, n)
+  if n == 0 then
+    return bit64.new(x[1], x[2])
+  elseif n >= 64 then
+    return bit64.new(0, 0)
+  elseif n >= 32 then
+    return bit64.new(0, bit32_raw_rshift(x[1], n - 32))
+  else
+    local new_low = bit32_raw_bor(bit32_raw_rshift(x[2], n), bit32_raw_lshift(x[1], 32 - n))
+    local new_high = bit32_raw_rshift(x[1], n)
+    return bit64.new(new_high, new_low)
+  end
+end
+
+--- Raw arithmetic right shift (uses bit32.raw_* internally).
+--- @param x Int64HighLow Value to shift {high, low}
+--- @param n integer Number of positions to shift (must be >= 0)
+--- @return Int64HighLow result {high, low} shifted value
+function bit64.raw_arshift(x, n)
+  if n == 0 then
+    return bit64.new(x[1], x[2])
+  end
+
+  local is_negative = bit32_raw_band(x[1], 0x80000000) ~= 0
+
+  if n >= 64 then
+    if is_negative then
+      return bit64.new(0xFFFFFFFF, 0xFFFFFFFF)
+    else
+      return bit64.new(0, 0)
+    end
+  elseif n >= 32 then
+    local new_low = bit32_raw_arshift(x[1], n - 32)
+    local new_high = is_negative and 0xFFFFFFFF or 0
+    return bit64.new(new_high, new_low)
+  else
+    local new_low = bit32_raw_bor(bit32_raw_rshift(x[2], n), bit32_raw_lshift(x[1], 32 - n))
+    local new_high = bit32_raw_arshift(x[1], n)
+    return bit64.new(new_high, new_low)
+  end
+end
+
+--- Raw left rotate (uses bit32.raw_* internally).
+--- @param x Int64HighLow Value to rotate {high, low}
+--- @param n integer Number of positions to rotate
+--- @return Int64HighLow result {high, low} rotated value
+function bit64.raw_rol(x, n)
+  n = n % 64
+  if n == 0 then
+    return bit64.new(x[1], x[2])
+  end
+
+  local high, low = x[1], x[2]
+
+  if n == 32 then
+    return bit64.new(low, high)
+  elseif n < 32 then
+    local new_high = bit32_raw_bor(bit32_raw_lshift(high, n), bit32_raw_rshift(low, 32 - n))
+    local new_low = bit32_raw_bor(bit32_raw_lshift(low, n), bit32_raw_rshift(high, 32 - n))
+    return bit64.new(new_high, new_low)
+  else
+    n = n - 32
+    local new_high = bit32_raw_bor(bit32_raw_lshift(low, n), bit32_raw_rshift(high, 32 - n))
+    local new_low = bit32_raw_bor(bit32_raw_lshift(high, n), bit32_raw_rshift(low, 32 - n))
+    return bit64.new(new_high, new_low)
+  end
+end
+
+--- Raw right rotate (uses bit32.raw_* internally).
+--- @param x Int64HighLow Value to rotate {high, low}
+--- @param n integer Number of positions to rotate
+--- @return Int64HighLow result {high, low} rotated value
+function bit64.raw_ror(x, n)
+  n = n % 64
+  if n == 0 then
+    return bit64.new(x[1], x[2])
+  end
+
+  local high, low = x[1], x[2]
+
+  if n == 32 then
+    return bit64.new(low, high)
+  elseif n < 32 then
+    local new_low = bit32_raw_bor(bit32_raw_rshift(low, n), bit32_raw_lshift(high, 32 - n))
+    local new_high = bit32_raw_bor(bit32_raw_rshift(high, n), bit32_raw_lshift(low, 32 - n))
+    return bit64.new(new_high, new_low)
+  else
+    n = n - 32
+    local new_low = bit32_raw_bor(bit32_raw_rshift(high, n), bit32_raw_lshift(low, 32 - n))
+    local new_high = bit32_raw_bor(bit32_raw_rshift(low, n), bit32_raw_lshift(high, 32 - n))
+    return bit64.new(new_high, new_low)
+  end
+end
+
+--- Raw 64-bit addition (uses bit32.raw_band for masking).
+--- @param a Int64HighLow First operand {high, low}
+--- @param b Int64HighLow Second operand {high, low}
+--- @return Int64HighLow result {high, low} sum
+function bit64.raw_add(a, b)
+  local low = a[2] + b[2]
+  local high = a[1] + b[1]
+
+  if low >= 0x100000000 then
+    high = high + 1
+    low = low % 0x100000000
+  end
+
+  high = high % 0x100000000
+
+  return bit64.new(high, low)
+end
 
 --------------------------------------------------------------------------------
 -- Self-test
@@ -821,6 +1010,18 @@ function bit64.selftest()
     print("  FAIL: new() with no args creates {0, 0}")
   end
 
+  -- Test bit64.new() normalizes negative values (LuaJIT raw_* compatibility)
+  total = total + 1
+  local neg_val = bit64.new(-1, -2147483648) -- -1 -> 0xFFFFFFFF, -2147483648 -> 0x80000000
+  if bit64.is_int64(neg_val) and neg_val[1] == 0xFFFFFFFF and neg_val[2] == 0x80000000 then
+    print("  PASS: new() normalizes negative values to unsigned")
+    passed = passed + 1
+  else
+    print("  FAIL: new() normalizes negative values to unsigned")
+    print(string.format("    Expected: {0x%08X, 0x%08X}", 0xFFFFFFFF, 0x80000000))
+    print(string.format("    Got:      {0x%08X, 0x%08X}", neg_val[1], neg_val[2]))
+  end
+
   -- Test is_int64() returns false for regular tables
   total = total + 1
   local plain_table = { 0x12345678, 0x9ABCDEF0 }
@@ -845,61 +1046,61 @@ function bit64.selftest()
     {
       name = "band",
       fn = function()
-        return bit64.band({ 1, 2 }, { 3, 4 })
+        return bit64.band(bit64.new(1, 2), bit64.new(3, 4))
       end,
     },
     {
       name = "bor",
       fn = function()
-        return bit64.bor({ 1, 2 }, { 3, 4 })
+        return bit64.bor(bit64.new(1, 2), bit64.new(3, 4))
       end,
     },
     {
       name = "bxor",
       fn = function()
-        return bit64.bxor({ 1, 2 }, { 3, 4 })
+        return bit64.bxor(bit64.new(1, 2), bit64.new(3, 4))
       end,
     },
     {
       name = "bnot",
       fn = function()
-        return bit64.bnot({ 1, 2 })
+        return bit64.bnot(bit64.new(1, 2))
       end,
     },
     {
       name = "lshift",
       fn = function()
-        return bit64.lshift({ 1, 2 }, 1)
+        return bit64.lshift(bit64.new(1, 2), 1)
       end,
     },
     {
       name = "rshift",
       fn = function()
-        return bit64.rshift({ 1, 2 }, 1)
+        return bit64.rshift(bit64.new(1, 2), 1)
       end,
     },
     {
       name = "arshift",
       fn = function()
-        return bit64.arshift({ 1, 2 }, 1)
+        return bit64.arshift(bit64.new(1, 2), 1)
       end,
     },
     {
       name = "rol",
       fn = function()
-        return bit64.rol({ 1, 2 }, 1)
+        return bit64.rol(bit64.new(1, 2), 1)
       end,
     },
     {
       name = "ror",
       fn = function()
-        return bit64.ror({ 1, 2 }, 1)
+        return bit64.ror(bit64.new(1, 2), 1)
       end,
     },
     {
       name = "add",
       fn = function()
-        return bit64.add({ 1, 2 }, { 3, 4 })
+        return bit64.add(bit64.new(1, 2), bit64.new(3, 4))
       end,
     },
     {
@@ -928,7 +1129,7 @@ function bit64.selftest()
   end
 
   -- Test to_number strict mode error case
-  print("\nRunning to_number strict mode tests...")
+  print("\nRunning to_number/from_number edge case tests...")
   total = total + 1
   local ok, err = pcall(function()
     bit64.to_number(bit64.new(0x00200000, 0x00000000), true) -- 2^53, exceeds 53-bit
@@ -942,6 +1143,220 @@ function bit64.selftest()
       print("    Expected error but got success")
     else
       print("    Expected '53-bit precision' error but got: " .. tostring(err))
+    end
+  end
+
+  -- Test to_number pass-through for number input
+  total = total + 1
+  local num_input = 12345
+  local num_result = bit64.to_number(num_input)
+  if num_result == num_input then
+    print("  PASS: to_number passes through number input unchanged")
+    passed = passed + 1
+  else
+    print("  FAIL: to_number passes through number input unchanged")
+    print("    Expected: " .. tostring(num_input))
+    print("    Got:      " .. tostring(num_result))
+  end
+
+  -- Test to_number errors on plain table (non-Int64)
+  total = total + 1
+  ok, err = pcall(function()
+    bit64.to_number({ 1, 2 }) -- plain table, not Int64
+  end)
+  if not ok and type(err) == "string" and string.find(err, "not a valid Int64") then
+    print("  PASS: to_number errors on plain table (non-Int64)")
+    passed = passed + 1
+  else
+    print("  FAIL: to_number errors on plain table (non-Int64)")
+    if ok then
+      print("    Expected error but got success")
+    else
+      print("    Expected 'not a valid Int64' error but got: " .. tostring(err))
+    end
+  end
+
+  -- Test from_number pass-through for Int64 input
+  total = total + 1
+  local int64_input = bit64.new(0x12345678, 0x9ABCDEF0)
+  local int64_result = bit64.from_number(int64_input)
+  if rawequal(int64_result, int64_input) then
+    print("  PASS: from_number passes through Int64 input unchanged")
+    passed = passed + 1
+  else
+    print("  FAIL: from_number passes through Int64 input unchanged")
+    print("    Expected same reference, got different object")
+  end
+
+  -- Test raw_* operations
+  print("\n  Testing raw_* operations...")
+
+  local raw_tests = {
+    -- Core bitwise (test high-bit cases where sign matters)
+    {
+      name = "raw_band(new(0xFFFFFFFF, 0x80000000), new(0x80000000, 0xFFFFFFFF))",
+      fn = function()
+        return bit64.raw_band(bit64.new(0xFFFFFFFF, 0x80000000), bit64.new(0x80000000, 0xFFFFFFFF))
+      end,
+      expected = bit64.new(0x80000000, 0x80000000),
+    },
+    {
+      name = "raw_bor(new(0x80000000, 0), new(0, 0x80000000))",
+      fn = function()
+        return bit64.raw_bor(bit64.new(0x80000000, 0), bit64.new(0, 0x80000000))
+      end,
+      expected = bit64.new(0x80000000, 0x80000000),
+    },
+    {
+      name = "raw_bxor(new(0xAAAAAAAA, 0x55555555), new(0x55555555, 0xAAAAAAAA))",
+      fn = function()
+        return bit64.raw_bxor(bit64.new(0xAAAAAAAA, 0x55555555), bit64.new(0x55555555, 0xAAAAAAAA))
+      end,
+      expected = bit64.new(0xFFFFFFFF, 0xFFFFFFFF),
+    },
+    {
+      name = "raw_bnot(new(0, 0))",
+      fn = function()
+        return bit64.raw_bnot(bit64.new(0, 0))
+      end,
+      expected = bit64.new(0xFFFFFFFF, 0xFFFFFFFF),
+    },
+
+    -- Shifts
+    {
+      name = "raw_lshift(new(0, 1), 63)",
+      fn = function()
+        return bit64.raw_lshift(bit64.new(0, 1), 63)
+      end,
+      expected = bit64.new(0x80000000, 0),
+    },
+    {
+      name = "raw_rshift(new(0x80000000, 0), 63)",
+      fn = function()
+        return bit64.raw_rshift(bit64.new(0x80000000, 0), 63)
+      end,
+      expected = bit64.new(0, 1),
+    },
+    {
+      name = "raw_arshift(new(0x80000000, 0), 32)",
+      fn = function()
+        return bit64.raw_arshift(bit64.new(0x80000000, 0), 32)
+      end,
+      expected = bit64.new(0xFFFFFFFF, 0x80000000),
+    },
+
+    -- Rotates
+    {
+      name = "raw_rol(new(0x12345678, 0x9ABCDEF0), 16)",
+      fn = function()
+        return bit64.raw_rol(bit64.new(0x12345678, 0x9ABCDEF0), 16)
+      end,
+      expected = bit64.new(0x56789ABC, 0xDEF01234),
+    },
+    {
+      name = "raw_ror(new(0x12345678, 0x9ABCDEF0), 16)",
+      fn = function()
+        return bit64.raw_ror(bit64.new(0x12345678, 0x9ABCDEF0), 16)
+      end,
+      expected = bit64.new(0xDEF01234, 0x56789ABC),
+    },
+
+    -- Addition
+    {
+      name = "raw_add(new(0xFFFFFFFF, 0xFFFFFFFF), new(0, 1))",
+      fn = function()
+        return bit64.raw_add(bit64.new(0xFFFFFFFF, 0xFFFFFFFF), bit64.new(0, 1))
+      end,
+      expected = bit64.new(0, 0),
+    },
+  }
+
+  for _, test in ipairs(raw_tests) do
+    total = total + 1
+    local result = test.fn()
+    if eq64(result, test.expected) then
+      print("  PASS: " .. test.name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test.name)
+      print("    Expected: " .. fmt64(test.expected))
+      print("    Got:      " .. fmt64(result))
+    end
+  end
+
+  -- Test that raw_* operations return Int64
+  print("\n  Testing raw_* operations return Int64...")
+  local raw_ops_returning_int64 = {
+    {
+      name = "raw_band",
+      fn = function()
+        return bit64.raw_band(bit64.new(1, 2), bit64.new(3, 4))
+      end,
+    },
+    {
+      name = "raw_bor",
+      fn = function()
+        return bit64.raw_bor(bit64.new(1, 2), bit64.new(3, 4))
+      end,
+    },
+    {
+      name = "raw_bxor",
+      fn = function()
+        return bit64.raw_bxor(bit64.new(1, 2), bit64.new(3, 4))
+      end,
+    },
+    {
+      name = "raw_bnot",
+      fn = function()
+        return bit64.raw_bnot(bit64.new(1, 2))
+      end,
+    },
+    {
+      name = "raw_lshift",
+      fn = function()
+        return bit64.raw_lshift(bit64.new(1, 2), 1)
+      end,
+    },
+    {
+      name = "raw_rshift",
+      fn = function()
+        return bit64.raw_rshift(bit64.new(1, 2), 1)
+      end,
+    },
+    {
+      name = "raw_arshift",
+      fn = function()
+        return bit64.raw_arshift(bit64.new(1, 2), 1)
+      end,
+    },
+    {
+      name = "raw_rol",
+      fn = function()
+        return bit64.raw_rol(bit64.new(1, 2), 1)
+      end,
+    },
+    {
+      name = "raw_ror",
+      fn = function()
+        return bit64.raw_ror(bit64.new(1, 2), 1)
+      end,
+    },
+    {
+      name = "raw_add",
+      fn = function()
+        return bit64.raw_add(bit64.new(1, 2), bit64.new(3, 4))
+      end,
+    },
+  }
+
+  for _, op in ipairs(raw_ops_returning_int64) do
+    total = total + 1
+    local result = op.fn()
+    if bit64.is_int64(result) then
+      print("  PASS: " .. op.name .. "() returns Int64")
+      passed = passed + 1
+    else
+      print("  FAIL: " .. op.name .. "() returns Int64")
     end
   end
 

@@ -69,6 +69,41 @@ local xored = bit64.bxor(
 
 Example: `0x123456789ABCDEF0` is represented as `{0x12345678, 0x9ABCDEF0}`
 
+### Raw Operations (Performance-Critical Code)
+
+The `bit32` and `bit64` modules provide `raw_*` variants for performance-critical
+code paths like cryptographic operations. These bypass the unsigned conversion
+wrapper used on LuaJIT, providing direct access to native bit library functions.
+
+**Available functions (bit32 and bit64):**
+- `raw_band`, `raw_bor`, `raw_bxor`, `raw_bnot`
+- `raw_lshift`, `raw_rshift`, `raw_arshift`
+- `raw_rol`, `raw_ror`
+- `raw_add`
+
+**Important:** On LuaJIT, raw_* functions may return **signed** 32-bit integers:
+
+```lua
+local bit32 = require("bitn").bit32
+
+-- Regular function (always unsigned)
+bit32.bxor(0x80000000, 1)      --> 2147483649
+
+-- Raw function (signed on LuaJIT)
+bit32.raw_bxor(0x80000000, 1)  --> -2147483647 (same bit pattern!)
+```
+
+**When to use raw_* functions:**
+- Chained bitwise operations (XOR, AND, OR, rotate) where sign doesn't matter
+- Crypto algorithms (ChaCha20, etc.) that only care about bit patterns
+- Tight loops where the `to_unsigned()` overhead is measurable
+
+**When NOT to use raw_* functions:**
+- When comparing results (`<`, `>`, `==`)
+- When doing arithmetic on the results
+- When formatting/displaying values
+- When you need guaranteed unsigned semantics
+
 ## Development
 
 ### Setup

@@ -10,17 +10,16 @@ local _compat = require("bitn._compat")
 
 -- Cache methods as locals for faster access
 local compat_band = _compat.band
+local compat_bnot = _compat.bnot
 local compat_bor = _compat.bor
 local compat_bxor = _compat.bxor
-local compat_bnot = _compat.bnot
 local compat_lshift = _compat.lshift
 local compat_rshift = _compat.rshift
 local impl_name = _compat.impl_name
+local math_floor = math.floor
 
 -- 16-bit mask constant
 local MASK16 = 0xFFFF
-
-local math_floor = math.floor
 
 --------------------------------------------------------------------------------
 -- Core operations
