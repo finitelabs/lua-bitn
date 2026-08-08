@@ -16,5 +16,11 @@
       "dist",
       "node_modules"
     ]
+  },
+  "diagnostics": {
+    "enable": true,
+    "disable": [],
+    "severity": {},
+    "globals": []
   }
 }
