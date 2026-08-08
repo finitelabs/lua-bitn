@@ -50,9 +50,26 @@ make format
 # Lint code
 make lint
 
+# Check LuaCATS annotations with lua-language-server
+make typecheck
+
 # Build single-file distribution
 make build
 ```
+
+### typecheck
+
+`make typecheck` runs lua-language-server against a committed
+`.luarc-typecheck.json` rather than whatever `.luarc.json` a developer has
+locally. It catches what luacheck does not: undefined or duplicate `@alias`,
+returns that disagree with `@return`, fields missing from a `@class`.
+
+`runtime.version` in that config is load-bearing. Left unset the server defaults
+to Lua 5.4 and checks this library as the wrong language, which reports a
+different set of findings rather than fewer. It is pinned to LuaJIT.
+
+Part of `check`, so CI enforces it. Clean under both 3.18.2 and 3.19.0; CI pins
+3.19.0 because the findings do move between versions.
 
 ## Architecture
 

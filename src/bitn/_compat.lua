@@ -143,10 +143,12 @@ end
 local bit_lib
 local is_luajit = false
 
--- Try LuaJIT's bit library first
-ok, result = pcall(require, "bit")
-if ok and result then
-  bit_lib = result
+-- Try LuaJIT's bit library first. Fresh locals rather than the pcall results
+-- from the native-operator probe above: that `result` is a compiled chunk, this
+-- one is a library table.
+local bit_ok, bit_module = pcall(require, "bit")
+if bit_ok and bit_module then
+  bit_lib = bit_module
   is_luajit = true
 else
   -- Try Lua 5.2's bit32 library (use rawget to avoid recursion with our module name)
