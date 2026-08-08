@@ -33,10 +33,18 @@ local MASK32 = 0xFFFFFFFF
 -- Implementation 1: Native operators (Lua 5.3+)
 --------------------------------------------------------------------------------
 
+-- Parsing `a & b` does not mean the result has 64-bit integer semantics. LuaJIT
+-- rolling releases from 2026 accept the syntax and return a signed 32-bit number,
+-- as from its `bit` library, while this branch assumes 5.3+ integers and skips the
+-- to_unsigned() normalisation such a host needs.
+--
+-- So test the value, not the runtime: 5.3+ answers 0xFFFFFFFF and anything with
+-- 32-bit semantics answers -1. Asking the question this way needs no list of which
+-- runtimes exist, so it stays correct for whatever grows the syntax next.
 local ok, result = pcall(load, "return function(a,b) return a & b end")
 if ok and result then
   local fn = result()
-  if fn then
+  if fn and fn(0xFFFFFFFF, 0xFFFFFFFF) == 0xFFFFFFFF then
     -- Native operators available - define all functions using them
     local native_band = fn
     local native_bor = assert(load("return function(a,b) return a | b end"))()
