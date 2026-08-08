@@ -152,6 +152,29 @@ lint:
 		exit 1; \
 	fi
 
+# Type-check annotations with the Lua language server
+#
+# `install-deps` already installs lua-language-server, but nothing ran it, so the
+# LuaCATS annotations were only checked by whoever had the server wired into
+# their editor. It catches what luacheck does not: undefined or duplicate
+# `@alias`, return counts that disagree with `@return`, fields missing from a
+# `@class`.
+#
+# `runtime.version` in the pinned config is load-bearing. Unset, the server
+# defaults to Lua 5.4 and silently checks this library as the wrong language;
+# bitn reports different findings under 5.4, LuaJIT and 5.1. `--configpath` keeps
+# the count off whatever `.luarc.json` a developer happens to have.
+.PHONY: typecheck
+typecheck:
+	@if command -v lua-language-server >/dev/null 2>&1; then \
+		echo "Running lua-language-server $$(lua-language-server --version)..."; \
+		lua-language-server --check "$(CURDIR)" --checklevel=Warning \
+			--configpath="$(CURDIR)/.luarc-typecheck.json" --logpath="$(CURDIR)/build/luals"; \
+	else \
+		echo "lua-language-server not found. Install with: make install-deps"; \
+		exit 1; \
+	fi
+
 .PHONY: check
 check: format-check lint
 	@echo "Code quality checks complete."
@@ -186,6 +209,7 @@ help:
 	@echo "  make format             - Format code with stylua"
 	@echo "  make format-check       - Check code formatting"
 	@echo "  make lint               - Lint code with luacheck"
+	@echo "  make typecheck          - Check annotations with lua-language-server"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make install-deps       - Install development dependencies"

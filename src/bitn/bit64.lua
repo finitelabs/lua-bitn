@@ -942,20 +942,23 @@ function bit64.selftest()
   for _, test in ipairs(test_vectors) do
     total = total + 1
     local result = test.fn(unpack_fn(test.inputs))
+    -- Held in a local so the type narrowing below applies to it; a table field
+    -- is not narrowed by a `type()` check.
+    local expected = test.expected
 
-    if type(test.expected) == "table" then
+    if type(expected) == "table" then
       -- 64-bit comparison
-      if eq64(result, test.expected) then
+      if eq64(result, expected) then
         print("  PASS: " .. test.name)
         passed = passed + 1
       else
         print("  FAIL: " .. test.name)
-        print("    Expected: " .. fmt64(test.expected))
+        print("    Expected: " .. fmt64(expected))
         print("    Got:      " .. fmt64(result))
       end
-    elseif type(test.expected) == "string" then
+    elseif type(expected) == "string" then
       -- Byte string comparison
-      if result == test.expected then
+      if result == expected then
         print("  PASS: " .. test.name)
         passed = passed + 1
       else
@@ -965,8 +968,8 @@ function bit64.selftest()
           print("    Got:      " .. type(result))
         else
           local exp_hex, got_hex = "", ""
-          for i = 1, #test.expected do
-            exp_hex = exp_hex .. string.format("%02X", string.byte(test.expected, i))
+          for i = 1, #expected do
+            exp_hex = exp_hex .. string.format("%02X", string.byte(expected, i))
           end
           for i = 1, #result do
             got_hex = got_hex .. string.format("%02X", string.byte(result, i))
@@ -976,12 +979,12 @@ function bit64.selftest()
         end
       end
     else
-      if result == test.expected then
+      if result == expected then
         print("  PASS: " .. test.name)
         passed = passed + 1
       else
         print("  FAIL: " .. test.name)
-        print("    Expected: " .. tostring(test.expected))
+        print("    Expected: " .. tostring(expected))
         print("    Got:      " .. tostring(result))
       end
     end
