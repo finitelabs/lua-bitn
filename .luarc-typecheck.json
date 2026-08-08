@@ -1,7 +1,9 @@
 {
   "runtime": {
     "version": "LuaJIT",
-    "special": {}
+    "special": {},
+    "plugin": "",
+    "pluginArgs": []
   },
   "workspace": {
     "useGitIgnore": false,
@@ -16,7 +18,9 @@
       "build",
       "dist",
       "node_modules"
-    ]
+    ],
+    "maxPreload": 5000,
+    "preloadFileSize": 500
   },
   "diagnostics": {
     "enable": true,
@@ -24,6 +28,9 @@
     "severity": {},
     "globals": [],
     "globalsRegex": [],
+    "neededFileStatus": {},
+    "groupFileStatus": {},
+    "groupSeverity": {},
     "enableScheme": [
       "file"
     ]
