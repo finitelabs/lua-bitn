@@ -59,17 +59,31 @@ make build
 
 ### typecheck
 
-`make typecheck` runs lua-language-server against a committed
-`.luarc-typecheck.json` rather than whatever `.luarc.json` a developer has
-locally. It catches what luacheck does not: undefined or duplicate `@alias`,
-returns that disagree with `@return`, fields missing from a `@class`.
+`make typecheck` runs lua-language-server against the committed
+`.luarc-typecheck.json`. It catches what luacheck does not: undefined or duplicate
+`@alias`, returns that disagree with `@return`, fields missing from a `@class`.
 
-`runtime.version` in that config is load-bearing. Left unset the server defaults
-to Lua 5.4 and checks this library as the wrong language, which reports a
-different set of findings rather than fewer. It is pinned to LuaJIT.
+`runtime.version` is pinned to LuaJIT because that is what Control4 runs, and here
+it is load-bearing for the check too: unset, the server assumes Lua 5.4 and reports
+the `math.pow` shim in `_compat.lua` and the `unpack` fallbacks in bit16/32/64 as
+deprecated, four findings that fail the gate. That is the general shape of it, in
+this repo and in lua-protobuf: a library carrying 5.1-era compat shims trips the
+deprecation check the moment the server assumes a newer language. Libraries without
+such shims, lua-noiseprotocol and lua-bthome-ble, are indifferent to the key.
 
-Part of `check`, so CI enforces it. Clean under both 3.18.2 and 3.19.0; CI pins
-3.19.0 because the findings do move between versions.
+`--configpath` displaces each individual setting the committed config declares,
+not each table, so a suppression knob is only closed if it is named. `diagnostics`
+therefore declares four: `enable`, `disable`, `severity` and `globals`. Each was
+measured as a live bypass with a planted probe, `enable: false` silencing the check
+entirely and the rest suppressing individual codes, and each is a no-op on a clean
+tree. Anything under `diagnostics` not in that list is still reachable from a local
+`.luarc.json`, so add it here rather than assume the list is complete.
+
+The server version is not pinned locally, though. `install-deps` takes whatever
+Homebrew has while CI pins 3.19.0, so compare the version the target prints if a
+local result disagrees with CI.
+
+Part of `check`, so CI enforces it.
 
 ## Architecture
 
