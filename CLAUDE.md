@@ -68,8 +68,8 @@ returns that disagree with `@return`, fields missing from a `@class`.
 to Lua 5.4 and checks this library as the wrong language, which reports a
 different set of findings rather than fewer. It is pinned to LuaJIT.
 
-Currently clean. Unlike `lint` it is not part of `check`; keep it at zero and
-that can change.
+Part of `check`, so CI enforces it. Clean under both 3.18.2 and 3.19.0; CI pins
+3.19.0 because the findings do move between versions.
 
 ## Architecture
 

@@ -152,18 +152,11 @@ lint:
 		exit 1; \
 	fi
 
-# Type-check annotations with the Lua language server
+# Type-check annotations with the Lua language server. Catches what luacheck does
+# not: undefined or duplicate `@alias`, returns that disagree with `@return`.
 #
-# `install-deps` already installs lua-language-server, but nothing ran it, so the
-# LuaCATS annotations were only checked by whoever had the server wired into
-# their editor. It catches what luacheck does not: undefined or duplicate
-# `@alias`, return counts that disagree with `@return`, fields missing from a
-# `@class`.
-#
-# `runtime.version` in the pinned config is load-bearing. Unset, the server
-# defaults to Lua 5.4 and silently checks this library as the wrong language;
-# bitn reports different findings under 5.4, LuaJIT and 5.1. `--configpath` keeps
-# the count off whatever `.luarc.json` a developer happens to have.
+# `runtime.version` in the pinned config is load-bearing: unset, the server
+# defaults to Lua 5.4 and checks this library as the wrong language.
 .PHONY: typecheck
 typecheck:
 	@if command -v lua-language-server >/dev/null 2>&1; then \
@@ -176,7 +169,7 @@ typecheck:
 	fi
 
 .PHONY: check
-check: format-check lint
+check: format-check lint typecheck
 	@echo "Code quality checks complete."
 
 # Clean generated files
