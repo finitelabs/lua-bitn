@@ -6,25 +6,27 @@
 lua-bitn/
 ├── src/bitn/
 │   ├── init.lua      # Module aggregator, exports bit16/bit32/bit64
-│   ├── _compat.lua   # Internal compatibility layer, feature detection
+│   ├── _compat.lua   # Internal compatibility layer, backend detection
 │   ├── bit16.lua     # 16-bit bitwise operations
 │   ├── bit32.lua     # 32-bit bitwise operations
-│   ├── bit64.lua     # 64-bit bitwise operations (uses {high, low} pairs)
+│   ├── bit64.lua     # 64-bit bitwise operations (Int64 {high, low} pairs)
 │   └── utils/
 │       ├── init.lua      # Utils module aggregator
 │       └── benchmark.lua # Benchmarking utilities
-├── tests/
-│   ├── test_bit16.lua    # 16-bit test vectors
-│   ├── test_bit32.lua    # 32-bit test vectors
-│   └── test_bit64.lua    # 64-bit test vectors
 ├── .github/workflows/
-│   ├── build.yml     # CI: lint, test matrix, build
+│   ├── build.yml     # CI: check (format/lint/typecheck), test matrix, build
 │   └── release.yml   # Release automation
-├── run_tests.sh      # Main test runner
-├── run_tests_matrix.sh   # Multi-version test runner
-├── run_benchmarks.sh # Benchmark runner
+├── .luarc-typecheck.json   # Hardened config for `make typecheck` (see below)
+├── .luacheckrc
+├── run_tests.sh            # Main test runner
+├── run_tests_matrix.sh     # Multi-version test runner
+├── run_benchmarks.sh       # Benchmark runner
+├── run_benchmarks_matrix.sh
 └── Makefile          # Build automation
 ```
+
+There is no `tests/` directory. Every module carries its own `selftest()` and
+`benchmark()`; the shell runners call them per module.
 
 ## Key Commands
 
@@ -53,9 +55,16 @@ make lint
 # Check LuaCATS annotations with lua-language-server
 make typecheck
 
+# Full gate: format-check + lint + typecheck
+make check
+
 # Build single-file distribution
 make build
 ```
+
+`make check` is the gate CI runs. `make all` is `format lint test build`, which
+reformats in place and runs neither `format-check` nor `typecheck` — it is not a
+substitute for `check`.
 
 ### typecheck
 
@@ -66,14 +75,13 @@ make build
 `runtime.version` is pinned to LuaJIT because that is what Control4 runs, and here
 it is load-bearing for the check too: unset, the server assumes Lua 5.4 and reports
 the `math.pow` shim in `_compat.lua` and the `unpack` fallbacks in bit16/32/64 as
-deprecated, four findings that fail the gate. That is the general shape of it, in
-this repo and in lua-protobuf: a library carrying 5.1-era compat shims trips the
-deprecation check the moment the server assumes a newer language. Libraries without
-such shims, lua-noiseprotocol and lua-bthome-ble, are indifferent to the key.
+deprecated, four findings that fail the gate. Any library carrying 5.1-era compat
+shims trips the deprecation check the moment the server assumes a newer language.
 
 `--configpath` displaces each individual setting the committed config declares,
 not each table, so a knob is only closed if it is named. Suppression keys can be
-enumerated from the diagnostics read sites:
+enumerated from the diagnostics read sites — paths below are inside a
+lua-language-server source checkout, not this repo:
 
     grep -rhoE "config\.get\([^,]*, *'Lua\.[A-Za-z.]+'" \
       script/core/diagnostics/*.lua script/provider/diagnostic.lua
@@ -125,109 +133,128 @@ Part of `check`, so CI enforces it.
 
 ### Module Design
 
-Each bit module (bit16, bit32, bit64) provides the same API:
-- Bitwise: band, bor, bxor, bnot
-- Shifts: lshift, rshift, arshift
-- Rotates: rol, ror
-- Arithmetic: add, mask
-- Byte conversions: uN_to_be_bytes, uN_to_le_bytes, be_bytes_to_uN, le_bytes_to_uN
+All three modules share a core API: `band`, `bor`, `bxor`, `bnot`, `lshift`,
+`rshift`, `arshift`, `rol`, `ror`, `add`, and the byte conversions
+`uN_to_be_bytes`, `uN_to_le_bytes`, `be_bytes_to_uN`, `le_bytes_to_uN`.
+
+The surface is not uniform beyond that, and the differences bite callers:
+
+- `mask` is **bit16 and bit32 only**. `bit64` has none.
+- `to_unsigned` is **bit32 only**.
+- `bit64` alone adds the Int64 constructors and accessors below, plus the compat
+  aliases `xor`, `shr`, `lsl`, `asr`.
 
 ### 64-bit Representation
 
-64-bit values use `{high, low}` pairs for Lua 5.1 compatibility:
+`bit64` represents a 64-bit value as a `{high, low}` pair for Lua 5.1
+compatibility, but the pair is **not a plain table**. `bit64.new` attaches a
+private metatable, and `bit64.is_int64` tests for it, so a bare literal is not a
+valid Int64:
+
 ```lua
--- 0x123456789ABCDEF0 represented as:
-local value = {0x12345678, 0x9ABCDEF0}
+-- Correct:
+local value = bit64.new(0x12345678, 0x9ABCDEF0)
+local also  = bit64.from_number(n)
+
+-- Rejected by to_number/to_hex/eq/is_zero with
+-- "Value is not a valid Int64HighLow pair":
+local bad = {0x12345678, 0x9ABCDEF0}
 ```
+
+The bitwise operations index `[1]`/`[2]` directly and so happen to accept a bare
+literal; the accessors do not. Construct through `new`/`from_number` or the two
+paths diverge silently until an accessor raises.
+
+`to_number(value, strict)` returns `high * 2^32 + low`. Values above 53 bits lose
+precision on a float build; passing `strict` raises instead of returning a lossy
+result.
 
 ### Compatibility Layer (_compat)
 
-The `_compat` module provides automatic feature detection and optimized primitives:
-- **Lua 5.3+**: Uses native bitwise operators (`&`, `|`, `~`, `<<`, `>>`)
-- **Lua 5.2**: Uses built-in `bit32` library
-- **LuaJIT**: Uses `bit` library with signed-to-unsigned conversion
-- **Lua 5.1**: Falls back to pure Lua arithmetic implementation
+`_compat` selects a backend by **probing behaviour, not by reading a version**. It
+compiles `a & b` and checks that `fn(0xFFFFFFFF, 0xFFFFFFFF) == 0xFFFFFFFF`:
 
-This ensures optimal performance on modern Lua while maintaining compatibility
-with older versions.
+- **Native operators** when that probe returns unsigned (Lua 5.3+).
+- **LuaJIT `bit`** otherwise, with signed-to-unsigned conversion.
+- **`bit32`** only as a fallback after `require("bit")` fails.
+- **Pure Lua arithmetic** when none is present.
+
+The probe exists because a syntax check is not sufficient: LuaJIT rolling releases
+from 2026 *parse* `a & b` but return signed 32-bit, so testing only whether the
+expression compiles would route them into the native branch and skip
+`to_unsigned()`. A consequence worth knowing: a Lua 5.1 install with LuaBitOp takes
+the LuaJIT path and reports `_compat.is_luajit = true`.
 
 ### Raw Operations (bit32 and bit64)
 
-The bit32 and bit64 modules provide `raw_*` variants for performance-critical code:
-- `raw_band`, `raw_bor`, `raw_bxor`, `raw_bnot`
-- `raw_lshift`, `raw_rshift`, `raw_arshift`
-- `raw_rol`, `raw_ror`
-- `raw_add`
+Both modules expose `raw_*` variants of every operation (`raw_band`, `raw_bor`,
+`raw_bxor`, `raw_bnot`, `raw_lshift`, `raw_rshift`, `raw_arshift`, `raw_rol`,
+`raw_ror`, `raw_add`). `bit16` has none.
 
-These bypass the `to_unsigned()` wrapper used on LuaJIT, returning signed
-integers when the high bit is set. On other platforms they behave identically
-to regular operations. Use for crypto code and tight loops where the sign
-interpretation doesn't matter.
+These bypass the `to_unsigned()` wrapper used on LuaJIT and return signed integers
+when the high bit is set. Elsewhere they match the regular operations **for
+in-range inputs only** — the wrapped versions also mask their arguments, the raw
+ones do not. Use for crypto code and tight loops where the sign interpretation
+does not matter.
 
-Note: Shift amounts >= 32 (or >= 64 for bit64) have platform-specific behavior
-in raw functions. Callers should keep shift amounts in valid range.
+Shift amounts >= 32 (>= 64 for bit64) are platform-specific in the raw functions.
+Callers must keep shift amounts in range.
 
 ## Testing
 
-Tests use Lua table-based vectors for easy maintenance:
+Each module ships a `selftest()` driven by the shell runners:
 
-```lua
-local test_vectors = {
-  { name = "band(0xFF, 0x0F)", fn = bit32.band, inputs = {0xFF, 0x0F}, expected = 0x0F },
-  -- ...
-}
+```bash
+./run_tests.sh          # all modules, or `make test`
+./run_tests.sh bit32    # one module, or `make test-bit32`
+make test-matrix        # across Lua versions
 ```
 
-Run with: `./run_tests.sh` or `make test`
+`make test-matrix` pins luaenv `5.1.5 5.2.4 5.3.6 5.4.8 luajit-2.1-dev` locally.
+CI additionally covers **LuaJIT 2.0**, so a green local matrix is a weaker signal
+than a green CI one.
 
 ## Benchmarking
 
-Each module includes a `benchmark()` function that measures performance of all
-operations. Benchmarks use the `bitn.utils.benchmark` module for consistent
-timing and output formatting.
+Each module includes a `benchmark()` function built on `bitn.utils.benchmark`,
+which runs 3 warmup iterations, defaults to 100 iterations, and reports ms/op and
+ops/sec. The modules call it with 100000.
 
 ```bash
-# Run all benchmarks (uses LuaJIT by default for best performance)
-./run_benchmarks.sh or `make bench`
-
-# Run with specific Lua version
+make bench                          # all, LuaJIT by default
+make bench-bit64                    # one module
 LUA_BINARY=lua5.4 ./run_benchmarks.sh
-
-# Run specific module
-./run_benchmarks.sh bit32
-make bench-bit64
 ```
-
-The benchmark utility performs:
-- 3 warmup iterations before timing
-- Configurable iteration count (default: 100, modules use 10000)
-- Reports ms/op and ops/sec metrics
 
 ## Building
 
-The build process uses `amalg` to create a single-file distribution:
+`amalg` produces a single-file distribution:
 
 ```bash
 make build
 # Output: build/bitn.lua
 ```
 
-Version is automatically injected from git tags during release.
+Version is injected from git tags during release.
 
 ## CI/CD
 
-- **build.yml**: Runs on push/PR to main
-  - Format check with stylua
-  - Lint with luacheck
-  - Test matrix (Lua 5.1-5.4, LuaJIT 2.0/2.1)
-  - Build single-file distribution
+- **build.yml** (workflow name `Lua Tests`): on push/PR to `main` or `master`.
+  - `check` job — `make check`, i.e. stylua format check, luacheck, and typecheck
+    against lua-language-server 3.19.0.
+  - `test` job — `make test-all` across Lua 5.1-5.4 and LuaJIT 2.0/2.1.
+  - `build` job — single-file distribution.
 
-- **release.yml**: Runs on version tags (v*)
-  - Builds and publishes release with bitn.lua artifact
+- **release.yml**: on version tags (`v*`) — builds and publishes a release with the
+  `build/bitn.lua` artifact.
 
 ## Code Style
 
 - 2-space indentation
 - 120 column width
 - Double quotes preferred
-- LuaDoc annotations for all public functions
+- LuaCATS annotations for all public functions
+
+stylua is invoked with these as CLI flags from the Makefile; there is no
+`.stylua.toml`. Formatting and linting cover `src/` only, so the root shell
+scripts and `.luacheckrc` are not checked.
