@@ -109,7 +109,7 @@ bit32.raw_bxor(0x80000000, 1)  --> -2147483647 (same bit pattern!)
 ### Setup
 
 ```bash
-# Install development dependencies (stylua, luacheck, amalg)
+# Install development dependencies (stylua, luacheck, lua-language-server, amalg)
 make install-deps
 ```
 
