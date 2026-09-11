@@ -16,13 +16,16 @@
 --- Only the integer codes are modelled. Sweeping the first payload byte over 0-255
 --- accepts 14 of them here against the controller's 22, and the two sets differ
 --- both ways (`B` is accepted here and not there, `A a c d f n p z` there and not
---- here). Those bytes are reachable: the swapped signature is what puts the payload
---- in the format slot, so a little-endian u32 whose low byte is one of the eight is
---- quiet on a controller and raises here, about 3% of values. The divergence still
---- does not affect what this double is for, because `packs_like_lua53()` compares
---- returned values on every format the library emits including the offset case, so
---- it fails closed whether the dialect raises or answers quietly, and the suite
---- asserts `_compat.string_pack` came out nil, which neither behaviour perturbs.
+--- here). Those bytes are reachable in principle: the swapped signature is what puts
+--- the payload in the format slot, so a little-endian u32 whose low byte is one of
+--- the eight is quiet on a controller and raises here, about 3% of values.
+---
+--- It does not reach them today, and the reason is a short circuit rather than the
+--- value comparisons. Counting calls at this boundary while `bitn._compat` loads,
+--- under both lua5.1 and luajit, gives pack 1 and unpack 0: `packs_like_lua53()`
+--- declines at its first `pack(">I4", ...)` on the `4` and returns, so the unpack
+--- parser the divergence lives in is never entered. Widening `pack` here to accept
+--- size suffixes would put the probe into that parser and make the divergence live.
 local lpack_shim = {}
 
 local SIZE = { b = 1, B = 1, h = 2, H = 2, i = 4, I = 4, l = 8, L = 8 }
