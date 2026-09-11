@@ -289,53 +289,78 @@ function _compat.impl_name()
   return "pure Lua"
 end
 
+-- 4-bit truth tables, indexed [a * 16 + b + 1], so each op is at most 8 steps.
+local AND4, OR4, XOR4 = {}, {}, {}
+for a = 0, 15 do
+  for b = 0, 15 do
+    local x, y, r_and, r_or, r_xor, bit_val = a, b, 0, 0, 0, 1
+    for _ = 1, 4 do
+      local xb, yb = x % 2, y % 2
+      if xb == 1 and yb == 1 then
+        r_and = r_and + bit_val
+      end
+      if xb == 1 or yb == 1 then
+        r_or = r_or + bit_val
+      end
+      if xb ~= yb then
+        r_xor = r_xor + bit_val
+      end
+      x, y, bit_val = (x - xb) / 2, (y - yb) / 2, bit_val * 2
+    end
+    local i = a * 16 + b + 1
+    AND4[i], OR4[i], XOR4[i] = r_and, r_or, r_xor
+  end
+end
+
+-- band(a, 2^k - 1) is a % 2^k.
+local LOW_MASK = {}
+for k = 1, 32 do
+  LOW_MASK[2 ^ k - 1] = 2 ^ k
+end
+
 function _compat.band(a, b)
-  local r = 0
-  local bit_val = 1
-  for _ = 0, 31 do
-    if (a % 2 == 1) and (b % 2 == 1) then
-      r = r + bit_val
-    end
-    a = math_floor(a / 2)
-    b = math_floor(b / 2)
-    bit_val = bit_val * 2
-    if a == 0 and b == 0 then
-      break
-    end
+  a, b = math_floor(a) % 0x100000000, math_floor(b) % 0x100000000
+  local m = LOW_MASK[b] or LOW_MASK[a]
+  if m then
+    return (LOW_MASK[b] and a or b) % m
+  end
+  local r, scale = 0, 1
+  while a > 0 and b > 0 do
+    local na, nb = a % 16, b % 16
+    r = r + AND4[na * 16 + nb + 1] * scale
+    a, b, scale = (a - na) / 16, (b - nb) / 16, scale * 16
   end
   return r
 end
 
 function _compat.bor(a, b)
-  local r = 0
-  local bit_val = 1
-  for _ = 0, 31 do
-    if (a % 2 == 1) or (b % 2 == 1) then
-      r = r + bit_val
-    end
-    a = math_floor(a / 2)
-    b = math_floor(b / 2)
-    bit_val = bit_val * 2
-    if a == 0 and b == 0 then
-      break
-    end
+  a, b = math_floor(a) % 0x100000000, math_floor(b) % 0x100000000
+  if a == 0 then
+    return b
+  elseif b == 0 then
+    return a
+  end
+  local r, scale = 0, 1
+  while a > 0 or b > 0 do
+    local na, nb = a % 16, b % 16
+    r = r + OR4[na * 16 + nb + 1] * scale
+    a, b, scale = (a - na) / 16, (b - nb) / 16, scale * 16
   end
   return r
 end
 
 function _compat.bxor(a, b)
-  local r = 0
-  local bit_val = 1
-  for _ = 0, 31 do
-    if (a % 2) ~= (b % 2) then
-      r = r + bit_val
-    end
-    a = math_floor(a / 2)
-    b = math_floor(b / 2)
-    bit_val = bit_val * 2
-    if a == 0 and b == 0 then
-      break
-    end
+  a, b = math_floor(a) % 0x100000000, math_floor(b) % 0x100000000
+  if a == 0 then
+    return b
+  elseif b == 0 then
+    return a
+  end
+  local r, scale = 0, 1
+  while a > 0 or b > 0 do
+    local na, nb = a % 16, b % 16
+    r = r + XOR4[na * 16 + nb + 1] * scale
+    a, b, scale = (a - na) / 16, (b - nb) / 16, scale * 16
   end
   return r
 end
