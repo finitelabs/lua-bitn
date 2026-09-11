@@ -41,6 +41,10 @@ local function probe_string_pack()
   if not packed_ok or packed ~= "\1\2\3\4" then
     return nil, nil
   end
+  packed_ok, packed = pcall(pack, ">I4", 0x04030201)
+  if not packed_ok or packed ~= "\4\3\2\1" then
+    return nil, nil
+  end
   local unpacked_ok, value, next_pos = pcall(unpack, "<I4", "\0\1\2\3\4", 2)
   if not unpacked_ok or value ~= 0x04030201 or next_pos ~= 6 then
     return nil, nil

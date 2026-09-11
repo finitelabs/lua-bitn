@@ -46,8 +46,8 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
-default_modules=("bit16" "bit32" "bit64" "lpack")
-all_modules=("bit16" "bit32" "bit64" "lpack")
+default_modules=("bit16" "bit32" "bit64" "probe" "lpack")
+all_modules=("bit16" "bit32" "bit64" "probe" "lpack")
 modules_to_run=("$@")
 
 # Validate modules if specified
@@ -130,6 +130,17 @@ run_selftest() {
 run_selftest "16-bit operations" "bit16" "bitn.bit16"
 run_selftest "32-bit operations" "bit32" "bitn.bit32"
 run_selftest "64-bit operations" "bit64" "bitn.bit64"
+
+# The probe must bind a real 5.3-dialect string.pack, or the byte helpers silently
+# lose their fast path; only the 5.3+ legs can prove this.
+run_test "string.pack binds when it is the 5.3 dialect" "probe" "
+    local _compat = require('bitn._compat')
+    if rawget(string, 'pack') and _compat.string_pack == nil then
+        print('string.pack is present but the probe declined it')
+        os.exit(1)
+    end
+    print(_compat.string_pack and 'string.pack bound' or 'no string.pack on this interpreter')
+  "
 
 # Control4's LuaJIT has string.pack/unpack as lpack, a different dialect: every
 # selftest again with that shape installed first, and the 5.3 fast path must stay unbound.
