@@ -46,8 +46,8 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
-default_modules=("bit16" "bit32" "bit64")
-all_modules=("bit16" "bit32" "bit64")
+default_modules=("bit16" "bit32" "bit64" "lpack")
+all_modules=("bit16" "bit32" "bit64" "lpack")
 modules_to_run=("$@")
 
 # Validate modules if specified
@@ -130,6 +130,21 @@ run_selftest() {
 run_selftest "16-bit operations" "bit16" "bitn.bit16"
 run_selftest "32-bit operations" "bit32" "bitn.bit32"
 run_selftest "64-bit operations" "bit64" "bitn.bit64"
+
+# Control4's LuaJIT has string.pack/unpack as lpack, a different dialect: every
+# selftest again with that shape installed first, and the 5.3 fast path must stay unbound.
+run_test "All operations with lpack-shaped string.pack" "lpack" "
+    dofile('$script_dir/test/lpack_stub.lua')
+    if require('bitn._compat').string_pack ~= nil then
+        print('lpack-shaped string.pack was bound as the 5.3 dialect')
+        os.exit(1)
+    end
+    for _, name in ipairs({ 'bitn.bit16', 'bitn.bit32', 'bitn.bit64' }) do
+        if not require(name).selftest() then
+            os.exit(1)
+        end
+    end
+  "
 
 passed_count=${#passed_modules[@]}
 failed_count=${#failed_modules[@]}

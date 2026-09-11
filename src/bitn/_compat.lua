@@ -29,6 +29,27 @@ _compat.to_unsigned = to_unsigned
 -- Constants
 local MASK32 = 0xFFFFFFFF
 
+-- string.pack/unpack are bound only if they answer in the 5.3 dialect. Control4's
+-- LuaJIT ships lpack under the same names: no size suffixes, and unpack takes
+-- (data, fmt, pos) and returns the position first, so existence proves nothing.
+local function probe_string_pack()
+  local pack, unpack = rawget(string, "pack"), rawget(string, "unpack")
+  if not (pack and unpack) then
+    return nil, nil
+  end
+  local packed_ok, packed = pcall(pack, "<I4", 0x04030201)
+  if not packed_ok or packed ~= "\1\2\3\4" then
+    return nil, nil
+  end
+  local unpacked_ok, value, next_pos = pcall(unpack, "<I4", "\0\1\2\3\4", 2)
+  if not unpacked_ok or value ~= 0x04030201 or next_pos ~= 6 then
+    return nil, nil
+  end
+  return pack, unpack
+end
+
+_compat.string_pack, _compat.string_unpack = probe_string_pack()
+
 --------------------------------------------------------------------------------
 -- Implementation 1: Native operators (Lua 5.3+)
 --------------------------------------------------------------------------------
