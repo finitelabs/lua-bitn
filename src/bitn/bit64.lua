@@ -27,9 +27,11 @@ local bit32_raw_bxor = bit32.raw_bxor
 local bit32_raw_lshift = bit32.raw_lshift
 local bit32_raw_rshift = bit32.raw_rshift
 local bit32_rshift = bit32.rshift
-local bit32_u32_to_be_bytes = bit32.u32_to_be_bytes
-local bit32_u32_to_le_bytes = bit32.u32_to_le_bytes
 local impl_name = _compat.impl_name
+local math_floor = math.floor
+local string_char = string.char
+local string_pack = rawget(string, "pack")
+local string_unpack = rawget(string, "unpack")
 
 -- Private metatable for Int64 type identification
 local Int64Meta = { __name = "Int64" }
@@ -271,14 +273,40 @@ end
 --- @param x Int64HighLow 64-bit value {high, low}
 --- @return string bytes 8-byte string in big-endian order
 function bit64.u64_to_be_bytes(x)
-  return bit32_u32_to_be_bytes(x[1]) .. bit32_u32_to_be_bytes(x[2])
+  local high, low = x[1] % 0x100000000, x[2] % 0x100000000
+  if string_pack then
+    return string_pack(">I4I4", high, low)
+  end
+  return string_char(
+    math_floor(high / 16777216) % 256,
+    math_floor(high / 65536) % 256,
+    math_floor(high / 256) % 256,
+    math_floor(high % 256),
+    math_floor(low / 16777216) % 256,
+    math_floor(low / 65536) % 256,
+    math_floor(low / 256) % 256,
+    math_floor(low % 256)
+  )
 end
 
 --- Convert 64-bit value to 8 bytes (little-endian).
 --- @param x Int64HighLow 64-bit value {high, low}
 --- @return string bytes 8-byte string in little-endian order
 function bit64.u64_to_le_bytes(x)
-  return bit32_u32_to_le_bytes(x[2]) .. bit32_u32_to_le_bytes(x[1])
+  local high, low = x[1] % 0x100000000, x[2] % 0x100000000
+  if string_pack then
+    return string_pack("<I4I4", low, high)
+  end
+  return string_char(
+    math_floor(low % 256),
+    math_floor(low / 256) % 256,
+    math_floor(low / 65536) % 256,
+    math_floor(low / 16777216) % 256,
+    math_floor(high % 256),
+    math_floor(high / 256) % 256,
+    math_floor(high / 65536) % 256,
+    math_floor(high / 16777216) % 256
+  )
 end
 
 --- Convert 8 bytes to 64-bit value (big-endian).
@@ -288,6 +316,10 @@ end
 function bit64.be_bytes_to_u64(str, offset)
   offset = offset or 1
   assert(#str >= offset + 7, "Insufficient bytes for u64")
+  if string_unpack then
+    local high, low = string_unpack(">I4I4", str, offset)
+    return setmetatable({ high, low }, Int64Meta)
+  end
   local high = bit32_be_bytes_to_u32(str, offset)
   local low = bit32_be_bytes_to_u32(str, offset + 4)
   return bit64.new(high, low)
@@ -300,6 +332,10 @@ end
 function bit64.le_bytes_to_u64(str, offset)
   offset = offset or 1
   assert(#str >= offset + 7, "Insufficient bytes for u64")
+  if string_unpack then
+    local low, high = string_unpack("<I4I4", str, offset)
+    return setmetatable({ high, low }, Int64Meta)
+  end
   local low = bit32_le_bytes_to_u32(str, offset)
   local high = bit32_le_bytes_to_u32(str, offset + 4)
   return bit64.new(high, low)
@@ -346,14 +382,12 @@ end
 --- @param value number|Int64HighLow The number to convert (or Int64HighLow to pass through).
 --- @return Int64HighLow pair The {high_32, low_32} pair.
 function bit64.from_number(value)
-  if bit64.is_int64(value) then
+  if type(value) == "table" and getmetatable(value) == Int64Meta then
     --- @cast value Int64HighLow
     return value
   end
   --- @cast value -Int64HighLow
-  local low = math.floor(value % 0x100000000)
-  local high = math.floor(value / 0x100000000)
-  return bit64.new(high, low)
+  return setmetatable({ math_floor(value / 0x100000000) % 0x100000000, math_floor(value % 0x100000000) }, Int64Meta)
 end
 
 --- Checks if two {high, low} pairs are equal.

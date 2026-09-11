@@ -223,12 +223,19 @@ end
 
 local string_char = string.char
 local string_byte = string.byte
+local string_pack = rawget(string, "pack")
+local string_unpack = rawget(string, "unpack")
+-- The pure Lua band is a per-bit loop, so reduce with % there instead.
+local fast_band = _compat.has_native_ops or _compat.has_bit_lib
 
 --- Convert 32-bit unsigned integer to 4 bytes (big-endian).
 --- @param n integer 32-bit unsigned integer
 --- @return string bytes 4-byte string in big-endian order
 function bit32.u32_to_be_bytes(n)
-  n = compat_band(n, MASK32)
+  if string_pack then
+    return string_pack(">I4", n % 0x100000000)
+  end
+  n = fast_band and compat_band(n, MASK32) or n % 0x100000000
   return string_char(
     math_floor(n / 16777216) % 256,
     math_floor(n / 65536) % 256,
@@ -241,7 +248,10 @@ end
 --- @param n integer 32-bit unsigned integer
 --- @return string bytes 4-byte string in little-endian order
 function bit32.u32_to_le_bytes(n)
-  n = compat_band(n, MASK32)
+  if string_pack then
+    return string_pack("<I4", n % 0x100000000)
+  end
+  n = fast_band and compat_band(n, MASK32) or n % 0x100000000
   return string_char(
     math_floor(n % 256),
     math_floor(n / 256) % 256,
@@ -257,6 +267,9 @@ end
 function bit32.be_bytes_to_u32(str, offset)
   offset = offset or 1
   assert(#str >= offset + 3, "Insufficient bytes for u32")
+  if string_unpack then
+    return (string_unpack(">I4", str, offset))
+  end
   local b1, b2, b3, b4 = string_byte(str, offset, offset + 3)
   return b1 * 16777216 + b2 * 65536 + b3 * 256 + b4
 end
@@ -268,6 +281,9 @@ end
 function bit32.le_bytes_to_u32(str, offset)
   offset = offset or 1
   assert(#str >= offset + 3, "Insufficient bytes for u32")
+  if string_unpack then
+    return (string_unpack("<I4", str, offset))
+  end
   local b1, b2, b3, b4 = string_byte(str, offset, offset + 3)
   return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
 end
@@ -282,6 +298,10 @@ local unpack_fn = unpack or table.unpack
 --- Run comprehensive self-test with test vectors.
 --- @return boolean result True if all tests pass, false otherwise
 function bit32.selftest()
+  local function fmt32(v)
+    return v < 0 and tostring(v) or string.format("0x%08X", v)
+  end
+
   print("Running 32-bit operations test vectors...")
   print(string.format("  Using: %s", impl_name()))
   local passed = 0
@@ -546,8 +566,8 @@ function bit32.selftest()
         print("    Expected: " .. exp_hex)
         print("    Got:      " .. got_hex)
       else
-        print(string.format("    Expected: 0x%08X", test.expected))
-        print(string.format("    Got:      0x%08X", result))
+        print("    Expected: " .. fmt32(test.expected))
+        print("    Got:      " .. fmt32(result))
       end
     end
   end
