@@ -27,9 +27,11 @@ local bit32_raw_bxor = bit32.raw_bxor
 local bit32_raw_lshift = bit32.raw_lshift
 local bit32_raw_rshift = bit32.raw_rshift
 local bit32_rshift = bit32.rshift
-local bit32_u32_to_be_bytes = bit32.u32_to_be_bytes
-local bit32_u32_to_le_bytes = bit32.u32_to_le_bytes
 local impl_name = _compat.impl_name
+local math_floor = math.floor
+local string_char = string.char
+local string_pack = rawget(string, "pack")
+local string_unpack = rawget(string, "unpack")
 
 -- Private metatable for Int64 type identification
 local Int64Meta = { __name = "Int64" }
@@ -271,14 +273,40 @@ end
 --- @param x Int64HighLow 64-bit value {high, low}
 --- @return string bytes 8-byte string in big-endian order
 function bit64.u64_to_be_bytes(x)
-  return bit32_u32_to_be_bytes(x[1]) .. bit32_u32_to_be_bytes(x[2])
+  local high, low = x[1] % 0x100000000, x[2] % 0x100000000
+  if string_pack then
+    return string_pack(">I4I4", high, low)
+  end
+  return string_char(
+    math_floor(high / 16777216) % 256,
+    math_floor(high / 65536) % 256,
+    math_floor(high / 256) % 256,
+    math_floor(high % 256),
+    math_floor(low / 16777216) % 256,
+    math_floor(low / 65536) % 256,
+    math_floor(low / 256) % 256,
+    math_floor(low % 256)
+  )
 end
 
 --- Convert 64-bit value to 8 bytes (little-endian).
 --- @param x Int64HighLow 64-bit value {high, low}
 --- @return string bytes 8-byte string in little-endian order
 function bit64.u64_to_le_bytes(x)
-  return bit32_u32_to_le_bytes(x[2]) .. bit32_u32_to_le_bytes(x[1])
+  local high, low = x[1] % 0x100000000, x[2] % 0x100000000
+  if string_pack then
+    return string_pack("<I4I4", low, high)
+  end
+  return string_char(
+    math_floor(low % 256),
+    math_floor(low / 256) % 256,
+    math_floor(low / 65536) % 256,
+    math_floor(low / 16777216) % 256,
+    math_floor(high % 256),
+    math_floor(high / 256) % 256,
+    math_floor(high / 65536) % 256,
+    math_floor(high / 16777216) % 256
+  )
 end
 
 --- Convert 8 bytes to 64-bit value (big-endian).
@@ -287,7 +315,16 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.be_bytes_to_u64(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 7, "Insufficient bytes for u64")
+  if offset ~= offset or offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 7 then
+    error("Insufficient bytes for u64")
+  end
+  if string_unpack then
+    local high, low = string_unpack(">I4I4", str, offset)
+    return setmetatable({ high, low }, Int64Meta)
+  end
   local high = bit32_be_bytes_to_u32(str, offset)
   local low = bit32_be_bytes_to_u32(str, offset + 4)
   return bit64.new(high, low)
@@ -299,7 +336,16 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.le_bytes_to_u64(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 7, "Insufficient bytes for u64")
+  if offset ~= offset or offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 7 then
+    error("Insufficient bytes for u64")
+  end
+  if string_unpack then
+    local low, high = string_unpack("<I4I4", str, offset)
+    return setmetatable({ high, low }, Int64Meta)
+  end
   local low = bit32_le_bytes_to_u32(str, offset)
   local high = bit32_le_bytes_to_u32(str, offset + 4)
   return bit64.new(high, low)
@@ -346,14 +392,12 @@ end
 --- @param value number|Int64HighLow The number to convert (or Int64HighLow to pass through).
 --- @return Int64HighLow pair The {high_32, low_32} pair.
 function bit64.from_number(value)
-  if bit64.is_int64(value) then
+  if type(value) == "table" and getmetatable(value) == Int64Meta then
     --- @cast value Int64HighLow
     return value
   end
   --- @cast value -Int64HighLow
-  local low = math.floor(value % 0x100000000)
-  local high = math.floor(value / 0x100000000)
-  return bit64.new(high, low)
+  return setmetatable({ math_floor(value / 0x100000000) % 0x100000000, math_floor(value % 0x100000000) }, Int64Meta)
 end
 
 --- Checks if two {high, low} pairs are equal.
@@ -913,6 +957,18 @@ function bit64.selftest()
       inputs = { 0 },
       expected = { 0x00000000, 0x00000000 },
     },
+    {
+      name = "from_number(-1)",
+      fn = bit64.from_number,
+      inputs = { -1 },
+      expected = { 0xFFFFFFFF, 0xFFFFFFFF },
+    },
+    {
+      name = "from_number(-2^70) wraps to 64 bits",
+      fn = bit64.from_number,
+      inputs = { -(2 ^ 70) },
+      expected = { 0x00000000, 0x00000000 },
+    },
 
     -- eq tests
     { name = "eq({1,2}, {1,2})", fn = bit64.eq, inputs = { { 1, 2 }, { 1, 2 } }, expected = true },
@@ -1360,6 +1416,58 @@ function bit64.selftest()
       passed = passed + 1
     else
       print("  FAIL: " .. op.name .. "() returns Int64")
+    end
+  end
+
+  total = total + 1
+  if 1 / bit64.from_number(-1 / math.huge)[1] > 0 then
+    print("  PASS: from_number(-0.0) gives a +0 high word")
+    passed = passed + 1
+  else
+    print("  FAIL: from_number(-0.0) gives a +0 high word")
+  end
+
+  local decoder_errors = {
+    { "le_bytes_to_u64 rejects offset 0", bit64.le_bytes_to_u64, "\1\2\3\4\5\6\7\8\9", 0, "Offset must be at least 1" },
+    { "be_bytes_to_u64 rejects offset 0", bit64.be_bytes_to_u64, "\1\2\3\4\5\6\7\8\9", 0, "Offset must be at least 1" },
+    {
+      "le_bytes_to_u64 rejects a NaN offset",
+      bit64.le_bytes_to_u64,
+      "\1\2\3\4\5\6\7\8\9",
+      0 / 0,
+      "Offset must be at least 1",
+    },
+    {
+      "be_bytes_to_u64 rejects a NaN offset",
+      bit64.be_bytes_to_u64,
+      "\1\2\3\4\5\6\7\8\9",
+      0 / 0,
+      "Offset must be at least 1",
+    },
+    {
+      "le_bytes_to_u64 rejects a short buffer",
+      bit64.le_bytes_to_u64,
+      "\1\2\3\4\5\6\7",
+      1,
+      "Insufficient bytes for u64",
+    },
+    {
+      "be_bytes_to_u64 rejects a short buffer",
+      bit64.be_bytes_to_u64,
+      "\1\2\3\4\5\6\7\8",
+      2,
+      "Insufficient bytes for u64",
+    },
+  }
+  for _, test in ipairs(decoder_errors) do
+    local test_name, fn, input, offset, message = test[1], test[2], test[3], test[4], test[5]
+    total = total + 1
+    local raised, err_text = pcall(fn, input, offset)
+    if not raised and type(err_text) == "string" and string.find(err_text, message, 1, true) then
+      print("  PASS: " .. test_name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test_name)
     end
   end
 

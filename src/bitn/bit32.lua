@@ -45,6 +45,17 @@ function bit32.to_unsigned(n)
   return compat_to_unsigned(n)
 end
 
+--- Convert unsigned 32-bit value to signed.
+--- The inverse of `to_unsigned`: values of 2^31 and above wrap to negative.
+--- @param n number Unsigned 32-bit value (already-signed values pass through)
+--- @return integer result Signed 32-bit value (-2^31 to 2^31 - 1)
+function bit32.to_signed(n)
+  if n >= 0x80000000 then
+    return n - 0x100000000
+  end
+  return n
+end
+
 --- Ensure value fits in 32-bit unsigned integer.
 --- @param n number Input value
 --- @return integer result 32-bit unsigned integer (0 to 0xFFFFFFFF)
@@ -212,12 +223,19 @@ end
 
 local string_char = string.char
 local string_byte = string.byte
+local string_pack = rawget(string, "pack")
+local string_unpack = rawget(string, "unpack")
+-- % is the whole operation on the pure Lua backend; skip the call.
+local fast_band = _compat.has_native_ops or _compat.has_bit_lib
 
 --- Convert 32-bit unsigned integer to 4 bytes (big-endian).
 --- @param n integer 32-bit unsigned integer
 --- @return string bytes 4-byte string in big-endian order
 function bit32.u32_to_be_bytes(n)
-  n = compat_band(n, MASK32)
+  if string_pack then
+    return string_pack(">I4", n % 0x100000000)
+  end
+  n = fast_band and compat_band(n, MASK32) or n % 0x100000000
   return string_char(
     math_floor(n / 16777216) % 256,
     math_floor(n / 65536) % 256,
@@ -230,7 +248,10 @@ end
 --- @param n integer 32-bit unsigned integer
 --- @return string bytes 4-byte string in little-endian order
 function bit32.u32_to_le_bytes(n)
-  n = compat_band(n, MASK32)
+  if string_pack then
+    return string_pack("<I4", n % 0x100000000)
+  end
+  n = fast_band and compat_band(n, MASK32) or n % 0x100000000
   return string_char(
     math_floor(n % 256),
     math_floor(n / 256) % 256,
@@ -245,7 +266,15 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.be_bytes_to_u32(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 3, "Insufficient bytes for u32")
+  if offset ~= offset or offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 3 then
+    error("Insufficient bytes for u32")
+  end
+  if string_unpack then
+    return (string_unpack(">I4", str, offset))
+  end
   local b1, b2, b3, b4 = string_byte(str, offset, offset + 3)
   return b1 * 16777216 + b2 * 65536 + b3 * 256 + b4
 end
@@ -256,7 +285,15 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.le_bytes_to_u32(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 3, "Insufficient bytes for u32")
+  if offset ~= offset or offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 3 then
+    error("Insufficient bytes for u32")
+  end
+  if string_unpack then
+    return (string_unpack("<I4", str, offset))
+  end
   local b1, b2, b3, b4 = string_byte(str, offset, offset + 3)
   return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
 end
@@ -271,6 +308,10 @@ local unpack_fn = unpack or table.unpack
 --- Run comprehensive self-test with test vectors.
 --- @return boolean result True if all tests pass, false otherwise
 function bit32.selftest()
+  local function fmt32(v)
+    return v < 0 and tostring(v) or string.format("0x%08X", v)
+  end
+
   print("Running 32-bit operations test vectors...")
   print(string.format("  Using: %s", impl_name()))
   local passed = 0
@@ -293,6 +334,15 @@ function bit32.selftest()
     { name = "to_unsigned(-1)", fn = bit32.to_unsigned, inputs = { -1 }, expected = 0xFFFFFFFF },
     { name = "to_unsigned(-2147483648)", fn = bit32.to_unsigned, inputs = { -2147483648 }, expected = 0x80000000 },
     { name = "to_unsigned(-2147483647)", fn = bit32.to_unsigned, inputs = { -2147483647 }, expected = 0x80000001 },
+
+    -- to_signed tests
+    { name = "to_signed(0)", fn = bit32.to_signed, inputs = { 0 }, expected = 0 },
+    { name = "to_signed(1)", fn = bit32.to_signed, inputs = { 1 }, expected = 1 },
+    { name = "to_signed(0x7FFFFFFF)", fn = bit32.to_signed, inputs = { 0x7FFFFFFF }, expected = 0x7FFFFFFF },
+    { name = "to_signed(0x80000000)", fn = bit32.to_signed, inputs = { 0x80000000 }, expected = -2147483648 },
+    { name = "to_signed(0x80000001)", fn = bit32.to_signed, inputs = { 0x80000001 }, expected = -2147483647 },
+    { name = "to_signed(0xFFFFFFFF)", fn = bit32.to_signed, inputs = { 0xFFFFFFFF }, expected = -1 },
+    { name = "to_signed(-1)", fn = bit32.to_signed, inputs = { -1 }, expected = -1 },
 
     -- band tests
     { name = "band(0xFF00FF00, 0x00FF00FF)", fn = bit32.band, inputs = { 0xFF00FF00, 0x00FF00FF }, expected = 0 },
@@ -526,8 +576,8 @@ function bit32.selftest()
         print("    Expected: " .. exp_hex)
         print("    Got:      " .. got_hex)
       else
-        print(string.format("    Expected: 0x%08X", test.expected))
-        print(string.format("    Got:      0x%08X", result))
+        print("    Expected: " .. fmt32(test.expected))
+        print("    Got:      " .. fmt32(result))
       end
     end
   end
@@ -714,6 +764,40 @@ function bit32.selftest()
       else
         print("  FAIL: " .. test.name .. " (not identical function reference)")
       end
+    end
+  end
+
+  total = total + 1
+  local mask_failures = {}
+  for k = 1, 32 do
+    if bit32.band(0xDEADBEEF, 2 ^ k - 1) ~= 0xDEADBEEF % 2 ^ k then
+      mask_failures[#mask_failures + 1] = k
+    end
+  end
+  if #mask_failures == 0 then
+    print("  PASS: band against every low-bit mask width")
+    passed = passed + 1
+  else
+    print("  FAIL: band against every low-bit mask width: " .. table.concat(mask_failures, ", "))
+  end
+
+  local decoder_errors = {
+    { "le_bytes_to_u32 rejects offset 0", bit32.le_bytes_to_u32, "\1\2\3\4\5", 0, "Offset must be at least 1" },
+    { "be_bytes_to_u32 rejects offset 0", bit32.be_bytes_to_u32, "\1\2\3\4\5", 0, "Offset must be at least 1" },
+    { "le_bytes_to_u32 rejects a NaN offset", bit32.le_bytes_to_u32, "\1\2\3\4\5", 0 / 0, "Offset must be at least 1" },
+    { "be_bytes_to_u32 rejects a NaN offset", bit32.be_bytes_to_u32, "\1\2\3\4\5", 0 / 0, "Offset must be at least 1" },
+    { "le_bytes_to_u32 rejects a short buffer", bit32.le_bytes_to_u32, "\1\2\3", 1, "Insufficient bytes for u32" },
+    { "be_bytes_to_u32 rejects a short buffer", bit32.be_bytes_to_u32, "\1\2\3\4", 2, "Insufficient bytes for u32" },
+  }
+  for _, test in ipairs(decoder_errors) do
+    local test_name, fn, input, offset, message = test[1], test[2], test[3], test[4], test[5]
+    total = total + 1
+    local raised, err_text = pcall(fn, input, offset)
+    if not raised and type(err_text) == "string" and string.find(err_text, message, 1, true) then
+      print("  PASS: " .. test_name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test_name)
     end
   end
 

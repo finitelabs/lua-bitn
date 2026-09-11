@@ -171,7 +171,12 @@ end
 --- @return integer n 16-bit unsigned integer
 function bit16.be_bytes_to_u16(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 1, "Insufficient bytes for u16")
+  if offset ~= offset or offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 1 then
+    error("Insufficient bytes for u16")
+  end
   local b1, b2 = string_byte(str, offset, offset + 1)
   return b1 * 256 + b2
 end
@@ -182,7 +187,12 @@ end
 --- @return integer n 16-bit unsigned integer
 function bit16.le_bytes_to_u16(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 1, "Insufficient bytes for u16")
+  if offset ~= offset or offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 1 then
+    error("Insufficient bytes for u16")
+  end
   local b1, b2 = string_byte(str, offset, offset + 1)
   return b1 + b2 * 256
 end
@@ -395,6 +405,26 @@ function bit16.selftest()
         print(string.format("    Expected: 0x%04X", test.expected))
         print(string.format("    Got:      0x%04X", result))
       end
+    end
+  end
+
+  local decoder_errors = {
+    { "le_bytes_to_u16 rejects offset 0", bit16.le_bytes_to_u16, "\1\2\3", 0, "Offset must be at least 1" },
+    { "be_bytes_to_u16 rejects offset 0", bit16.be_bytes_to_u16, "\1\2\3", 0, "Offset must be at least 1" },
+    { "le_bytes_to_u16 rejects a NaN offset", bit16.le_bytes_to_u16, "\1\2\3", 0 / 0, "Offset must be at least 1" },
+    { "be_bytes_to_u16 rejects a NaN offset", bit16.be_bytes_to_u16, "\1\2\3", 0 / 0, "Offset must be at least 1" },
+    { "le_bytes_to_u16 rejects a short buffer", bit16.le_bytes_to_u16, "\1", 1, "Insufficient bytes for u16" },
+    { "be_bytes_to_u16 rejects a short buffer", bit16.be_bytes_to_u16, "\1\2", 2, "Insufficient bytes for u16" },
+  }
+  for _, test in ipairs(decoder_errors) do
+    local test_name, fn, input, offset, message = test[1], test[2], test[3], test[4], test[5]
+    total = total + 1
+    local raised, err_text = pcall(fn, input, offset)
+    if not raised and type(err_text) == "string" and string.find(err_text, message, 1, true) then
+      print("  PASS: " .. test_name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test_name)
     end
   end
 
