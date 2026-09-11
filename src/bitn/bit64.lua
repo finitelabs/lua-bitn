@@ -315,6 +315,7 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.be_bytes_to_u64(str, offset)
   offset = offset or 1
+  assert(offset >= 1, "Offset must be at least 1")
   assert(#str >= offset + 7, "Insufficient bytes for u64")
   if string_unpack then
     local high, low = string_unpack(">I4I4", str, offset)
@@ -331,6 +332,7 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.le_bytes_to_u64(str, offset)
   offset = offset or 1
+  assert(offset >= 1, "Offset must be at least 1")
   assert(#str >= offset + 7, "Insufficient bytes for u64")
   if string_unpack then
     local low, high = string_unpack("<I4I4", str, offset)
@@ -947,6 +949,18 @@ function bit64.selftest()
       inputs = { 0 },
       expected = { 0x00000000, 0x00000000 },
     },
+    {
+      name = "from_number(-1)",
+      fn = bit64.from_number,
+      inputs = { -1 },
+      expected = { 0xFFFFFFFF, 0xFFFFFFFF },
+    },
+    {
+      name = "from_number(-2^70) wraps to 64 bits",
+      fn = bit64.from_number,
+      inputs = { -(2 ^ 70) },
+      expected = { 0x00000000, 0x00000000 },
+    },
 
     -- eq tests
     { name = "eq({1,2}, {1,2})", fn = bit64.eq, inputs = { { 1, 2 }, { 1, 2 } }, expected = true },
@@ -1394,6 +1408,27 @@ function bit64.selftest()
       passed = passed + 1
     else
       print("  FAIL: " .. op.name .. "() returns Int64")
+    end
+  end
+
+  total = total + 1
+  if 1 / bit64.from_number(-1 / math.huge)[1] > 0 then
+    print("  PASS: from_number(-0.0) gives a +0 high word")
+    passed = passed + 1
+  else
+    print("  FAIL: from_number(-0.0) gives a +0 high word")
+  end
+
+  for _, test in ipairs({
+    { name = "le_bytes_to_u64 rejects offset 0", fn = bit64.le_bytes_to_u64 },
+    { name = "be_bytes_to_u64 rejects offset 0", fn = bit64.be_bytes_to_u64 },
+  }) do
+    total = total + 1
+    if not pcall(test.fn, "\1\2\3\4\5\6\7\8\9", 0) then
+      print("  PASS: " .. test.name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test.name)
     end
   end
 

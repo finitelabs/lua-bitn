@@ -266,6 +266,7 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.be_bytes_to_u32(str, offset)
   offset = offset or 1
+  assert(offset >= 1, "Offset must be at least 1")
   assert(#str >= offset + 3, "Insufficient bytes for u32")
   if string_unpack then
     return (string_unpack(">I4", str, offset))
@@ -280,6 +281,7 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.le_bytes_to_u32(str, offset)
   offset = offset or 1
+  assert(offset >= 1, "Offset must be at least 1")
   assert(#str >= offset + 3, "Insufficient bytes for u32")
   if string_unpack then
     return (string_unpack("<I4", str, offset))
@@ -754,6 +756,19 @@ function bit32.selftest()
       else
         print("  FAIL: " .. test.name .. " (not identical function reference)")
       end
+    end
+  end
+
+  for _, test in ipairs({
+    { name = "le_bytes_to_u32 rejects offset 0", fn = bit32.le_bytes_to_u32 },
+    { name = "be_bytes_to_u32 rejects offset 0", fn = bit32.be_bytes_to_u32 },
+  }) do
+    total = total + 1
+    if not pcall(test.fn, "\1\2\3\4\5", 0) then
+      print("  PASS: " .. test.name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test.name)
     end
   end
 
