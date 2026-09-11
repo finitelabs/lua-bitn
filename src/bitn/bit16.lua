@@ -171,7 +171,12 @@ end
 --- @return integer n 16-bit unsigned integer
 function bit16.be_bytes_to_u16(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 1, "Insufficient bytes for u16")
+  if offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 1 then
+    error("Insufficient bytes for u16")
+  end
   local b1, b2 = string_byte(str, offset, offset + 1)
   return b1 * 256 + b2
 end
@@ -182,7 +187,12 @@ end
 --- @return integer n 16-bit unsigned integer
 function bit16.le_bytes_to_u16(str, offset)
   offset = offset or 1
-  assert(#str >= offset + 1, "Insufficient bytes for u16")
+  if offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 1 then
+    error("Insufficient bytes for u16")
+  end
   local b1, b2 = string_byte(str, offset, offset + 1)
   return b1 + b2 * 256
 end
@@ -395,6 +405,19 @@ function bit16.selftest()
         print(string.format("    Expected: 0x%04X", test.expected))
         print(string.format("    Got:      0x%04X", result))
       end
+    end
+  end
+
+  for _, test in ipairs({
+    { name = "le_bytes_to_u16 rejects offset 0", fn = bit16.le_bytes_to_u16 },
+    { name = "be_bytes_to_u16 rejects offset 0", fn = bit16.be_bytes_to_u16 },
+  }) do
+    total = total + 1
+    if not pcall(test.fn, "\1\2\3", 0) then
+      print("  PASS: " .. test.name)
+      passed = passed + 1
+    else
+      print("  FAIL: " .. test.name)
     end
   end
 

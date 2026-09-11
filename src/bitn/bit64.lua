@@ -315,8 +315,12 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.be_bytes_to_u64(str, offset)
   offset = offset or 1
-  assert(offset >= 1, "Offset must be at least 1")
-  assert(#str >= offset + 7, "Insufficient bytes for u64")
+  if offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 7 then
+    error("Insufficient bytes for u64")
+  end
   if string_unpack then
     local high, low = string_unpack(">I4I4", str, offset)
     return setmetatable({ high, low }, Int64Meta)
@@ -332,8 +336,12 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.le_bytes_to_u64(str, offset)
   offset = offset or 1
-  assert(offset >= 1, "Offset must be at least 1")
-  assert(#str >= offset + 7, "Insufficient bytes for u64")
+  if offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 7 then
+    error("Insufficient bytes for u64")
+  end
   if string_unpack then
     local low, high = string_unpack("<I4I4", str, offset)
     return setmetatable({ high, low }, Int64Meta)

@@ -266,8 +266,12 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.be_bytes_to_u32(str, offset)
   offset = offset or 1
-  assert(offset >= 1, "Offset must be at least 1")
-  assert(#str >= offset + 3, "Insufficient bytes for u32")
+  if offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 3 then
+    error("Insufficient bytes for u32")
+  end
   if string_unpack then
     return (string_unpack(">I4", str, offset))
   end
@@ -281,8 +285,12 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.le_bytes_to_u32(str, offset)
   offset = offset or 1
-  assert(offset >= 1, "Offset must be at least 1")
-  assert(#str >= offset + 3, "Insufficient bytes for u32")
+  if offset < 1 then
+    error("Offset must be at least 1")
+  end
+  if #str < offset + 3 then
+    error("Insufficient bytes for u32")
+  end
   if string_unpack then
     return (string_unpack("<I4", str, offset))
   end
