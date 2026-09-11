@@ -312,10 +312,14 @@ for a = 0, 15 do
   end
 end
 
--- band(a, 2^k - 1) is a % 2^k.
+-- band(a, 2^k - 1) is a % 2^k. Built by doubling so the values are integers on 5.3+.
 local LOW_MASK = {}
-for k = 1, 32 do
-  LOW_MASK[2 ^ k - 1] = 2 ^ k
+do
+  local m = 1
+  for _ = 1, 32 do
+    m = m * 2
+    LOW_MASK[m - 1] = m
+  end
 end
 
 function _compat.band(a, b)

@@ -315,7 +315,7 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.be_bytes_to_u64(str, offset)
   offset = offset or 1
-  if offset < 1 then
+  if offset ~= offset or offset < 1 then
     error("Offset must be at least 1")
   end
   if #str < offset + 7 then
@@ -336,7 +336,7 @@ end
 --- @return Int64HighLow value {high, low} 64-bit value
 function bit64.le_bytes_to_u64(str, offset)
   offset = offset or 1
-  if offset < 1 then
+  if offset ~= offset or offset < 1 then
     error("Offset must be at least 1")
   end
   if #str < offset + 7 then
@@ -1427,16 +1427,47 @@ function bit64.selftest()
     print("  FAIL: from_number(-0.0) gives a +0 high word")
   end
 
-  for _, test in ipairs({
-    { name = "le_bytes_to_u64 rejects offset 0", fn = bit64.le_bytes_to_u64 },
-    { name = "be_bytes_to_u64 rejects offset 0", fn = bit64.be_bytes_to_u64 },
-  }) do
+  local decoder_errors = {
+    { "le_bytes_to_u64 rejects offset 0", bit64.le_bytes_to_u64, "\1\2\3\4\5\6\7\8\9", 0, "Offset must be at least 1" },
+    { "be_bytes_to_u64 rejects offset 0", bit64.be_bytes_to_u64, "\1\2\3\4\5\6\7\8\9", 0, "Offset must be at least 1" },
+    {
+      "le_bytes_to_u64 rejects a NaN offset",
+      bit64.le_bytes_to_u64,
+      "\1\2\3\4\5\6\7\8\9",
+      0 / 0,
+      "Offset must be at least 1",
+    },
+    {
+      "be_bytes_to_u64 rejects a NaN offset",
+      bit64.be_bytes_to_u64,
+      "\1\2\3\4\5\6\7\8\9",
+      0 / 0,
+      "Offset must be at least 1",
+    },
+    {
+      "le_bytes_to_u64 rejects a short buffer",
+      bit64.le_bytes_to_u64,
+      "\1\2\3\4\5\6\7",
+      1,
+      "Insufficient bytes for u64",
+    },
+    {
+      "be_bytes_to_u64 rejects a short buffer",
+      bit64.be_bytes_to_u64,
+      "\1\2\3\4\5\6\7\8",
+      2,
+      "Insufficient bytes for u64",
+    },
+  }
+  for _, test in ipairs(decoder_errors) do
+    local test_name, fn, input, offset, message = test[1], test[2], test[3], test[4], test[5]
     total = total + 1
-    if not pcall(test.fn, "\1\2\3\4\5\6\7\8\9", 0) then
-      print("  PASS: " .. test.name)
+    local raised, err_text = pcall(fn, input, offset)
+    if not raised and type(err_text) == "string" and string.find(err_text, message, 1, true) then
+      print("  PASS: " .. test_name)
       passed = passed + 1
     else
-      print("  FAIL: " .. test.name)
+      print("  FAIL: " .. test_name)
     end
   end
 

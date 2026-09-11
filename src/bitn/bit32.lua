@@ -225,7 +225,7 @@ local string_char = string.char
 local string_byte = string.byte
 local string_pack = rawget(string, "pack")
 local string_unpack = rawget(string, "unpack")
--- The pure Lua band is a per-bit loop, so reduce with % there instead.
+-- % is the whole operation on the pure Lua backend; skip the call.
 local fast_band = _compat.has_native_ops or _compat.has_bit_lib
 
 --- Convert 32-bit unsigned integer to 4 bytes (big-endian).
@@ -266,7 +266,7 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.be_bytes_to_u32(str, offset)
   offset = offset or 1
-  if offset < 1 then
+  if offset ~= offset or offset < 1 then
     error("Offset must be at least 1")
   end
   if #str < offset + 3 then
@@ -285,7 +285,7 @@ end
 --- @return integer n 32-bit unsigned integer
 function bit32.le_bytes_to_u32(str, offset)
   offset = offset or 1
-  if offset < 1 then
+  if offset ~= offset or offset < 1 then
     error("Offset must be at least 1")
   end
   if #str < offset + 3 then
@@ -767,16 +767,37 @@ function bit32.selftest()
     end
   end
 
-  for _, test in ipairs({
-    { name = "le_bytes_to_u32 rejects offset 0", fn = bit32.le_bytes_to_u32 },
-    { name = "be_bytes_to_u32 rejects offset 0", fn = bit32.be_bytes_to_u32 },
-  }) do
+  total = total + 1
+  local mask_failures = {}
+  for k = 1, 32 do
+    if bit32.band(0xDEADBEEF, 2 ^ k - 1) ~= 0xDEADBEEF % 2 ^ k then
+      mask_failures[#mask_failures + 1] = k
+    end
+  end
+  if #mask_failures == 0 then
+    print("  PASS: band against every low-bit mask width")
+    passed = passed + 1
+  else
+    print("  FAIL: band against every low-bit mask width: " .. table.concat(mask_failures, ", "))
+  end
+
+  local decoder_errors = {
+    { "le_bytes_to_u32 rejects offset 0", bit32.le_bytes_to_u32, "\1\2\3\4\5", 0, "Offset must be at least 1" },
+    { "be_bytes_to_u32 rejects offset 0", bit32.be_bytes_to_u32, "\1\2\3\4\5", 0, "Offset must be at least 1" },
+    { "le_bytes_to_u32 rejects a NaN offset", bit32.le_bytes_to_u32, "\1\2\3\4\5", 0 / 0, "Offset must be at least 1" },
+    { "be_bytes_to_u32 rejects a NaN offset", bit32.be_bytes_to_u32, "\1\2\3\4\5", 0 / 0, "Offset must be at least 1" },
+    { "le_bytes_to_u32 rejects a short buffer", bit32.le_bytes_to_u32, "\1\2\3", 1, "Insufficient bytes for u32" },
+    { "be_bytes_to_u32 rejects a short buffer", bit32.be_bytes_to_u32, "\1\2\3\4", 2, "Insufficient bytes for u32" },
+  }
+  for _, test in ipairs(decoder_errors) do
+    local test_name, fn, input, offset, message = test[1], test[2], test[3], test[4], test[5]
     total = total + 1
-    if not pcall(test.fn, "\1\2\3\4\5", 0) then
-      print("  PASS: " .. test.name)
+    local raised, err_text = pcall(fn, input, offset)
+    if not raised and type(err_text) == "string" and string.find(err_text, message, 1, true) then
+      print("  PASS: " .. test_name)
       passed = passed + 1
     else
-      print("  FAIL: " .. test.name)
+      print("  FAIL: " .. test_name)
     end
   end
 
