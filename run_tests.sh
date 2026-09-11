@@ -115,11 +115,27 @@ run_test() {
     echo
 }
 
+# Each module runs twice: once against whatever the interpreter provides, and once
+# with string.pack/string.unpack replaced by the lpack-shaped pair a Control4
+# controller ships, which the byte helpers must detect and decline to call. The
+# shim is installed before the require because the dialect is probed at load.
 run_selftest() {
   local module_name="$1"
   local module_key="$2"
   local lua_module="$3"
   run_test "$module_name" "$module_key" "
+    local result = require('$lua_module').selftest()
+    if not result then
+        os.exit(1)
+    end
+  "
+  run_test "$module_name [lpack string.pack]" "$module_key" "
+    require('test.lpack_shim').install()
+    local _compat = require('bitn._compat')
+    if _compat.string_pack ~= nil or _compat.string_unpack ~= nil then
+        print('FAIL: the dialect probe bound an lpack string.pack/string.unpack')
+        os.exit(1)
+    end
     local result = require('$lua_module').selftest()
     if not result then
         os.exit(1)

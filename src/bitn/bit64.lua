@@ -30,8 +30,8 @@ local bit32_rshift = bit32.rshift
 local impl_name = _compat.impl_name
 local math_floor = math.floor
 local string_char = string.char
-local string_pack = rawget(string, "pack")
-local string_unpack = rawget(string, "unpack")
+local string_pack = _compat.string_pack
+local string_unpack = _compat.string_unpack
 
 -- Private metatable for Int64 type identification
 local Int64Meta = { __name = "Int64" }

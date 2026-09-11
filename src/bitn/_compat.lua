@@ -30,6 +30,81 @@ _compat.to_unsigned = to_unsigned
 local MASK32 = 0xFFFFFFFF
 
 --------------------------------------------------------------------------------
+-- string.pack/string.unpack dialect detection
+--------------------------------------------------------------------------------
+
+-- Two unrelated APIs ship under these two names. Lua 5.3+ has pack(fmt, ...) with
+-- size-suffixed codes and unpack(fmt, s, pos) returning value then position.
+-- Control4's DriverWorks has lpack: pack(fmt, ...) with no size suffixes, and
+-- unpack(s, fmt, pos) returning position then value. Presence says nothing about
+-- which one is installed.
+--
+-- Guessing wrong is not a loud failure. Measured on a controller, lpack reads a
+-- 5.3-shaped call's payload as its format string, and that parser stops at a NUL
+-- byte or when the data runs out rather than erroring, so `>I4` decodes of 0, 42
+-- and 65535 all return 1 with nothing raised. So test the contract by value, on
+-- every format this module uses, and fall back unless all of them answer exactly.
+local string_pack = rawget(string, "pack")
+local string_unpack = rawget(string, "unpack")
+
+local function packs_like_lua53()
+  if not (string_pack and string_unpack) then
+    return false
+  end
+
+  local ok, s = pcall(string_pack, ">I4", 0x01020304)
+  if not (ok and s == "\1\2\3\4") then
+    return false
+  end
+  ok, s = pcall(string_pack, "<I4", 0x01020304)
+  if not (ok and s == "\4\3\2\1") then
+    return false
+  end
+  ok, s = pcall(string_pack, ">I4I4", 0x01020304, 0x05060708)
+  if not (ok and s == "\1\2\3\4\5\6\7\8") then
+    return false
+  end
+  ok, s = pcall(string_pack, "<I4I4", 0x01020304, 0x05060708)
+  if not (ok and s == "\4\3\2\1\8\7\6\5") then
+    return false
+  end
+
+  local high, low, pos
+  ok, high, pos = pcall(string_unpack, ">I4", "\1\2\3\4", 1)
+  if not (ok and high == 0x01020304 and pos == 5) then
+    return false
+  end
+  ok, high, pos = pcall(string_unpack, "<I4", "\4\3\2\1", 1)
+  if not (ok and high == 0x01020304 and pos == 5) then
+    return false
+  end
+  ok, high, low, pos = pcall(string_unpack, ">I4I4", "\1\2\3\4\5\6\7\8", 1)
+  if not (ok and high == 0x01020304 and low == 0x05060708 and pos == 9) then
+    return false
+  end
+  ok, high, low, pos = pcall(string_unpack, "<I4I4", "\4\3\2\1\8\7\6\5", 1)
+  if not (ok and high == 0x01020304 and low == 0x05060708 and pos == 9) then
+    return false
+  end
+
+  -- The decoders forward a caller-supplied offset, which 1 does not exercise.
+  ok, high, pos = pcall(string_unpack, ">I4", "\0\1\2\3\4", 2)
+  return ok and high == 0x01020304 and pos == 6
+end
+
+if not packs_like_lua53() then
+  string_pack, string_unpack = nil, nil
+end
+
+--- `string.pack` when it honours the Lua 5.3 contract, otherwise nil.
+--- @type nil|fun(fmt: string, ...: integer): string
+_compat.string_pack = string_pack
+
+--- `string.unpack` when it honours the Lua 5.3 contract, otherwise nil.
+--- @type nil|fun(fmt: string, s: string, pos: integer): ...
+_compat.string_unpack = string_unpack
+
+--------------------------------------------------------------------------------
 -- Implementation 1: Native operators (Lua 5.3+)
 --------------------------------------------------------------------------------
 

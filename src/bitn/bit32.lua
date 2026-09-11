@@ -223,8 +223,8 @@ end
 
 local string_char = string.char
 local string_byte = string.byte
-local string_pack = rawget(string, "pack")
-local string_unpack = rawget(string, "unpack")
+local string_pack = _compat.string_pack
+local string_unpack = _compat.string_unpack
 -- % is the whole operation on the pure Lua backend; skip the call.
 local fast_band = _compat.has_native_ops or _compat.has_bit_lib
 

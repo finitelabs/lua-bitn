@@ -185,6 +185,19 @@ expression compiles would route them into the native branch and skip
 `to_unsigned()`. A consequence worth knowing: a Lua 5.1 install with LuaBitOp takes
 the LuaJIT path and reports `_compat.is_luajit = true`.
 
+`_compat` probes `string.pack`/`string.unpack` the same way, and exports them as
+`_compat.string_pack` / `_compat.string_unpack`, nil unless they honour the Lua 5.3
+contract. The byte helpers in bit32/bit64 take their fast path from those two names
+and never from `string.pack` directly. Two unrelated APIs ship under those names:
+Lua 5.3+ has `pack(fmt, ...)` with size-suffixed codes and `unpack(fmt, s, pos)`
+returning value then position, while Control4's DriverWorks has lpack, with no size
+suffixes and an argument-swapped `unpack(s, fmt, pos)` returning position then
+value. Testing presence rather than contract is not a loud failure on a controller:
+lpack reads the payload of a 5.3-shaped call as its format string, and that parser
+stops at a NUL byte or when the data runs out instead of erroring, so `>I4` decodes
+of 0, 42 and 65535 all returned 1 there with nothing raised. The probe therefore
+checks returned values, across every format string the library uses.
+
 ### Raw Operations (bit32 and bit64)
 
 Both modules expose `raw_*` variants of every operation (`raw_band`, `raw_bor`,
@@ -213,6 +226,15 @@ make test-matrix        # across Lua versions
 `make test-matrix` pins luaenv `5.1.5 5.2.4 5.3.6 5.4.8 luajit-2.1-dev` locally.
 CI additionally covers **LuaJIT 2.0**, so a green local matrix is a weaker signal
 than a green CI one.
+
+Every module runs twice per interpreter. The second pass installs
+`test/lpack_shim.lua`, an lpack-shaped `string.pack`/`string.unpack` modelled on a
+Control4 controller, before the module is required, and asserts that
+`_compat.string_pack` came out nil before running the selftest. That assertion is
+what makes the pass meaningful: without it the run would go green on an
+interpreter that never had `string.pack` at all. On 5.3+ the shim also overwrites a
+genuine `string.pack`, so the fallback is exercised on hosts that would otherwise
+always take the fast path.
 
 ## Benchmarking
 
