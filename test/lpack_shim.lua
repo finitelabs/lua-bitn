@@ -16,8 +16,13 @@
 --- Only the integer codes are modelled. Sweeping the first payload byte over 0-255
 --- accepts 14 of them here against the controller's 22, and the two sets differ
 --- both ways (`B` is accepted here and not there, `A a c d f n p z` there and not
---- here). None of those codes are reachable from this library, which emits `I4`
---- alone, so the divergence does not affect what this double is for.
+--- here). Those bytes are reachable: the swapped signature is what puts the payload
+--- in the format slot, so a little-endian u32 whose low byte is one of the eight is
+--- quiet on a controller and raises here, about 3% of values. The divergence still
+--- does not affect what this double is for, because `packs_like_lua53()` compares
+--- returned values on every format the library emits including the offset case, so
+--- it fails closed whether the dialect raises or answers quietly, and the suite
+--- asserts `_compat.string_pack` came out nil, which neither behaviour perturbs.
 local lpack_shim = {}
 
 local SIZE = { b = 1, B = 1, h = 2, H = 2, i = 4, I = 4, l = 8, L = 8 }
