@@ -140,7 +140,7 @@ All three modules share a core API: `band`, `bor`, `bxor`, `bnot`, `lshift`,
 The surface is not uniform beyond that, and the differences bite callers:
 
 - `mask` is **bit16 and bit32 only**. `bit64` has none.
-- `to_unsigned` is **bit32 only**.
+- `to_unsigned` and `to_signed` are **bit32 only**.
 - `bit64` alone adds the Int64 constructors and accessors below, plus the compat
   aliases `xor`, `shr`, `lsl`, `asr`.
 

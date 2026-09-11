@@ -45,6 +45,17 @@ function bit32.to_unsigned(n)
   return compat_to_unsigned(n)
 end
 
+--- Convert unsigned 32-bit value to signed.
+--- The inverse of `to_unsigned`: values of 2^31 and above wrap to negative.
+--- @param n number Unsigned 32-bit value (already-signed values pass through)
+--- @return integer result Signed 32-bit value (-2^31 to 2^31 - 1)
+function bit32.to_signed(n)
+  if n >= 0x80000000 then
+    return n - 0x100000000
+  end
+  return n
+end
+
 --- Ensure value fits in 32-bit unsigned integer.
 --- @param n number Input value
 --- @return integer result 32-bit unsigned integer (0 to 0xFFFFFFFF)
@@ -293,6 +304,15 @@ function bit32.selftest()
     { name = "to_unsigned(-1)", fn = bit32.to_unsigned, inputs = { -1 }, expected = 0xFFFFFFFF },
     { name = "to_unsigned(-2147483648)", fn = bit32.to_unsigned, inputs = { -2147483648 }, expected = 0x80000000 },
     { name = "to_unsigned(-2147483647)", fn = bit32.to_unsigned, inputs = { -2147483647 }, expected = 0x80000001 },
+
+    -- to_signed tests
+    { name = "to_signed(0)", fn = bit32.to_signed, inputs = { 0 }, expected = 0 },
+    { name = "to_signed(1)", fn = bit32.to_signed, inputs = { 1 }, expected = 1 },
+    { name = "to_signed(0x7FFFFFFF)", fn = bit32.to_signed, inputs = { 0x7FFFFFFF }, expected = 0x7FFFFFFF },
+    { name = "to_signed(0x80000000)", fn = bit32.to_signed, inputs = { 0x80000000 }, expected = -2147483648 },
+    { name = "to_signed(0x80000001)", fn = bit32.to_signed, inputs = { 0x80000001 }, expected = -2147483647 },
+    { name = "to_signed(0xFFFFFFFF)", fn = bit32.to_signed, inputs = { 0xFFFFFFFF }, expected = -1 },
+    { name = "to_signed(-1)", fn = bit32.to_signed, inputs = { -1 }, expected = -1 },
 
     -- band tests
     { name = "band(0xFF00FF00, 0x00FF00FF)", fn = bit32.band, inputs = { 0xFF00FF00, 0x00FF00FF }, expected = 0 },
