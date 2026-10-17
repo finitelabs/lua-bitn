@@ -2,7 +2,8 @@
 
 A portable bitwise operations library for 16-bit, 32-bit, and 64-bit integers
 with **zero external dependencies**. This library provides a complete,
-cross-platform implementation that runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT.
+cross-platform implementation that runs on Lua 5.1, 5.2, 5.3, 5.4, 5.5, and
+LuaJIT.
 
 ## Features
 
