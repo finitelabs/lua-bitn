@@ -124,7 +124,7 @@ local `.luarc.json`. Re-run both enumerations when upgrading the server rather t
 assuming this list stayed complete.
 
 The server version is not pinned locally, though. `install-deps` takes whatever
-Homebrew has while CI pins 3.19.0, so compare the version the target prints if a
+Homebrew has while CI pins 3.19.2, so compare the version the target prints if a
 local result disagrees with CI.
 
 Part of `check`, so CI enforces it.
@@ -211,8 +211,8 @@ make test-matrix        # across Lua versions
 ```
 
 `make test-matrix` pins luaenv `5.1.5 5.2.4 5.3.6 5.4.8 luajit-2.1-dev` locally.
-CI additionally covers **LuaJIT 2.0**, so a green local matrix is a weaker signal
-than a green CI one.
+CI additionally covers **Lua 5.5** and **LuaJIT 2.0**, so a green local matrix is
+a weaker signal than a green CI one.
 
 ## Benchmarking
 
@@ -241,8 +241,8 @@ Version is injected from git tags during release.
 
 - **build.yml** (workflow name `Lua Tests`): on push/PR to `main` or `master`.
   - `check` job — `make check`, i.e. stylua format check, luacheck, and typecheck
-    against lua-language-server 3.19.0.
-  - `test` job — `make test-all` across Lua 5.1-5.4 and LuaJIT 2.0/2.1.
+    against lua-language-server 3.19.2.
+  - `test` job — `make test-all` across Lua 5.1-5.5 and LuaJIT 2.0/2.1.
   - `build` job — single-file distribution.
 
 - **release.yml**: on version tags (`v*`) — builds and publishes a release with the
