@@ -4,16 +4,17 @@
 --- @class bitn.with_tests: bitn
 local bitn = require("bitn")
 
+-- Parenthesized: from Lua 5.4 on, require returns a second value that a table constructor would keep.
 local SELFTESTS = {
-  require("test_bit16"),
-  require("test_bit32"),
-  require("test_bit64"),
+  (require("test_bit16")),
+  (require("test_bit32")),
+  (require("test_bit64")),
 }
 
 local BENCHMARKS = {
-  require("bench_bit16"),
-  require("bench_bit32"),
-  require("bench_bit64"),
+  (require("bench_bit16")),
+  (require("bench_bit32")),
+  (require("bench_bit64")),
 }
 
 --- Run every test suite.
