@@ -9,6 +9,9 @@
 #   ./run_tests.sh bit32 bit64        # Run only bit32 and bit64
 #
 # Available modules: bit16, bit32, bit64
+#
+# TEST_BUNDLE=build/bitn.lua runs the same tests against that built file, with src/
+# off the path so nothing can load from it.
 
 set -e  # Exit on any error
 
@@ -44,6 +47,13 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Add repository root to Lua's package path
 # This allows require() to find modules in the src/vendor directories
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
+load_lib=""
+if [ -n "$TEST_BUNDLE" ]; then
+    [ -f "$TEST_BUNDLE" ] || { echo -e "${red}Error: $TEST_BUNDLE not found; run make build${nc}"; exit 1; }
+    echo "Testing the built bundle: $TEST_BUNDLE"
+    lua_path="$script_dir/test/?.lua;$script_dir/vendor/?.lua"
+    load_lib="package.preload['bitn'] = assert(loadfile('$TEST_BUNDLE')); require('bitn');"
+fi
 
 # Parse command line arguments to determine which modules to run
 default_modules=("bit16" "bit32" "bit64" "probe" "lpack")
@@ -118,22 +128,23 @@ run_test() {
 run_selftest() {
   local module_name="$1"
   local module_key="$2"
-  local lua_module="$3"
   run_test "$module_name" "$module_key" "
-    local result = require('$lua_module').selftest()
+    $load_lib
+    local result = dofile('$script_dir/test/test_$module_key.lua')()
     if not result then
         os.exit(1)
     end
   "
 }
 
-run_selftest "16-bit operations" "bit16" "bitn.bit16"
-run_selftest "32-bit operations" "bit32" "bitn.bit32"
-run_selftest "64-bit operations" "bit64" "bitn.bit64"
+run_selftest "16-bit operations" "bit16"
+run_selftest "32-bit operations" "bit32"
+run_selftest "64-bit operations" "bit64"
 
 # The probe must bind a real 5.3-dialect string.pack, or the byte helpers silently
 # lose their fast path; only the 5.3+ legs can prove this.
 run_test "string.pack binds when it is the 5.3 dialect" "probe" "
+    $load_lib
     local _compat = require('bitn._compat')
     if rawget(string, 'pack') and _compat.string_pack == nil then
         print('string.pack is present but the probe declined it')
@@ -143,15 +154,16 @@ run_test "string.pack binds when it is the 5.3 dialect" "probe" "
   "
 
 # Control4's LuaJIT has string.pack/unpack as lpack, a different dialect: every
-# selftest again with that shape installed first, and the 5.3 fast path must stay unbound.
+# test again with that shape installed first, and the 5.3 fast path must stay unbound.
 run_test "All operations with lpack-shaped string.pack" "lpack" "
     dofile('$script_dir/test/lpack_stub.lua')
+    $load_lib
     if require('bitn._compat').string_pack ~= nil then
         print('lpack-shaped string.pack was bound as the 5.3 dialect')
         os.exit(1)
     end
-    for _, name in ipairs({ 'bitn.bit16', 'bitn.bit32', 'bitn.bit64' }) do
-        if not require(name).selftest() then
+    for _, name in ipairs({ 'bit16', 'bit32', 'bit64' }) do
+        if not dofile('$script_dir/test/test_' .. name .. '.lua')() then
             os.exit(1)
         end
     end

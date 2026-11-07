@@ -9,10 +9,18 @@ lua-bitn/
 │   ├── _compat.lua   # Internal compatibility layer, backend detection
 │   ├── bit16.lua     # 16-bit bitwise operations
 │   ├── bit32.lua     # 32-bit bitwise operations
-│   ├── bit64.lua     # 64-bit bitwise operations (Int64 {high, low} pairs)
-│   └── utils/
-│       ├── init.lua      # Utils module aggregator
-│       └── benchmark.lua # Benchmarking utilities
+│   └── bit64.lua     # 64-bit bitwise operations (Int64 {high, low} pairs)
+├── test/
+│   ├── test_bit16.lua    # Tests per module; each returns its test function
+│   ├── test_bit32.lua
+│   ├── test_bit64.lua
+│   ├── lpack_stub.lua    # Control4's lpack-shaped string.pack, for the lpack run
+│   └── with_tests.lua    # Main chunk of the with-tests build
+├── bench/
+│   ├── bench_bit16.lua   # Benchmarks per module; each returns its function
+│   ├── bench_bit32.lua
+│   ├── bench_bit64.lua
+│   └── benchmark.lua     # Benchmarking helper
 ├── .github/workflows/
 │   ├── build.yml     # CI: check (format/lint/typecheck), test matrix, build
 │   └── release.yml   # Release automation
@@ -25,8 +33,8 @@ lua-bitn/
 └── Makefile          # Build automation
 ```
 
-There is no `tests/` directory. Every module carries its own `selftest()` and
-`benchmark()`; the shell runners call them per module.
+Nothing under `src/` is test code: tests live in `test/`, benchmarks in `bench/`,
+and `make build` fails if `build/bitn.lua` mentions `selftest` or `benchmark`.
 
 ## Key Commands
 
@@ -202,13 +210,21 @@ Callers must keep shift amounts in range.
 
 ## Testing
 
-Each module ships a `selftest()` driven by the shell runners:
+`test/test_<module>.lua` returns a function that runs that module's vectors,
+prints each result and returns true when all pass. The shell runners call them:
 
 ```bash
 ./run_tests.sh          # all modules, or `make test`
 ./run_tests.sh bit32    # one module, or `make test-bit32`
 make test-matrix        # across Lua versions
+make build test-bundle  # the same tests against the built files
 ```
+
+`TEST_BUNDLE=build/bitn.lua ./run_tests.sh` loads that file first and takes
+`src/` off the path, so a module missing from the bundle fails instead of
+loading from source. `test-bundle` then runs the with-tests build's own
+`selftest()`. CI runs both on every interpreter in the matrix, against the
+files the build job made.
 
 `make test-matrix` pins luaenv `5.1.5 5.2.4 5.3.6 5.4.8 luajit-2.1-dev` locally.
 CI additionally covers **Lua 5.5** and **LuaJIT 2.0**, so a green local matrix is
@@ -216,9 +232,9 @@ a weaker signal than a green CI one.
 
 ## Benchmarking
 
-Each module includes a `benchmark()` function built on `bitn.utils.benchmark`,
+`bench/bench_<module>.lua` returns a function built on `bench/benchmark.lua`,
 which runs 3 warmup iterations, defaults to 100 iterations, and reports ms/op and
-ops/sec. The modules call it with 100000.
+ops/sec. The benchmarks call it with 100000.
 
 ```bash
 make bench                          # all, LuaJIT by default
@@ -228,25 +244,29 @@ LUA_BINARY=lua5.4 ./run_benchmarks.sh
 
 ## Building
 
-`amalg` produces a single-file distribution:
+`amalg` produces two single files:
 
 ```bash
 make build
-# Output: build/bitn.lua
+# build/bitn.lua        the library (no dependencies, so also portable)
+# build/bitn-tests.lua  the library plus test/ and bench/, from test/with_tests.lua
 ```
 
-Version is injected from git tags during release.
+`dofile("build/bitn-tests.lua")` returns the library with `selftest()` and
+`benchmark()` added, for running them where the library runs, a Control4
+controller included. Version is injected from git tags into both.
 
 ## CI/CD
 
 - **build.yml** (workflow name `Lua Tests`): on push/PR to `main` or `master`.
   - `check` job — `make check`, i.e. stylua format check, luacheck, and typecheck
     against lua-language-server 3.19.2.
-  - `test` job — `make test-all` across Lua 5.1-5.5 and LuaJIT 2.0/2.1.
-  - `build` job — single-file distribution.
+  - `build` job — both single files, uploaded as the `bitn` artifact.
+  - `test` job — `make test-all test-bundle` across Lua 5.1-5.5 and LuaJIT
+    2.0/2.1, on the build job's files.
 
-- **release.yml**: on version tags (`v*`) — builds and publishes a release with the
-  `build/bitn.lua` artifact.
+- **release.yml**: on version tags (`v*`) — builds, runs `make test-bundle`, and
+  publishes `build/bitn.lua` and `build/bitn-tests.lua`.
 
 ## Code Style
 
@@ -256,5 +276,5 @@ Version is injected from git tags during release.
 - LuaCATS annotations for all public functions
 
 stylua is invoked with these as CLI flags from the Makefile; there is no
-`.stylua.toml`. Formatting and linting cover `src/` only, so the root shell
-scripts and `.luacheckrc` are not checked.
+`.stylua.toml`. Formatting and linting cover `src/`, `test/` and `bench/`, so the
+root shell scripts and `.luacheckrc` are not checked.

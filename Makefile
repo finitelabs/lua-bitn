@@ -4,6 +4,11 @@ LUAROCKS_PATH := $(shell luarocks path --lr-path 2>/dev/null)
 # Lua path for local modules (src, vendor)
 LUA_PATH_LOCAL := ./?.lua;./?/init.lua;./src/?.lua;./src/?/init.lua;./vendor/?.lua;$(LUAROCKS_PATH)
 
+# Lua path for the with-tests build: the library plus test/ and bench/
+LUA_PATH_TESTS := ./test/?.lua;./bench/?.lua;$(LUA_PATH_LOCAL)
+
+LUA_BINARY ?= lua
+
 # Default target
 .PHONY: all
 all: format lint test build
@@ -28,6 +33,13 @@ test-matrix-%:
 test-%:
 	./run_tests.sh $*
 
+# Run the tests against what ships: build/bitn.lua with src/ off the path, then the
+# with-tests build's own selftest()
+.PHONY: test-bundle
+test-bundle:
+	TEST_BUNDLE=build/bitn.lua ./run_tests.sh all
+	LUA_PATH= $(LUA_BINARY) -e 'os.exit(dofile("build/bitn-tests.lua").selftest() and 0 or 1)'
+
 # Run benchmarks
 .PHONY: bench
 bench:
@@ -48,7 +60,7 @@ bench-matrix-%:
 bench-%:
 	./run_benchmarks.sh $*
 
-build/amalg.cache: src/bitn/init.lua
+build/amalg.cache: $(shell find src -name '*.lua')
 	@echo "Generating amalgamation cache..."
 	@mkdir -p build
 	@if command -v amalg.lua >/dev/null 2>&1; then \
@@ -61,19 +73,34 @@ build/amalg.cache: src/bitn/init.lua
 		exit 1; \
 	fi
 
+# The with-tests build's modules: everything test/with_tests.lua loads
+build/amalg-tests.cache: $(shell find src test bench -name '*.lua')
+	@echo "Generating amalgamation cache for the with-tests build..."
+	@mkdir -p build
+	@LUA_PATH="$(LUA_PATH_TESTS)" lua -lamalg test/with_tests.lua && mv amalg.cache build/amalg-tests.cache
+
 # Build single-file distributions
 .PHONY: build
-build: build/amalg.cache
+build: build/amalg.cache build/amalg-tests.cache
 	@echo "Building single-file distribution..."
 	@if command -v amalg.lua >/dev/null 2>&1; then \
 		LUA_PATH="$(LUA_PATH_LOCAL)" amalg.lua -o build/bitn.lua -C ./build/amalg.cache || exit 1;\
 		echo "Built build/bitn.lua"; \
+		LUA_PATH="$(LUA_PATH_TESTS)" amalg.lua -o build/bitn-tests.lua -C ./build/amalg-tests.cache || exit 1; \
+		echo "Built build/bitn-tests.lua (with tests and benchmarks; all dependencies bundled)"; \
+		if grep -n -E 'selftest|benchmark' build/bitn.lua; then \
+			echo "build/bitn.lua carries test code; tests belong in test/ and bench/"; \
+			exit 1; \
+		fi; \
 		VERSION=$$(git describe --exact-match --tags 2>/dev/null || echo "dev"); \
 		if [ "$$VERSION" != "dev" ]; then \
 			echo "Injecting version $$VERSION..."; \
 			sed -i.bak 's/VERSION = "dev"/VERSION = "'$$VERSION'"/' build/bitn.lua && rm build/bitn.lua.bak; \
+			sed -i.bak 's/VERSION = "dev"/VERSION = "'$$VERSION'"/' build/bitn-tests.lua && rm build/bitn-tests.lua.bak; \
 		fi; \
 		echo "Testing version function..."; \
+		TESTS_VERSION=$$(LUA_PATH= lua -e 'local b = dofile("build/bitn-tests.lua"); print(b.version())' 2>/dev/null || echo "test failed"); \
+		if [ "$$TESTS_VERSION" != "$$VERSION" ]; then echo "Version test failed for build/bitn-tests.lua: $$TESTS_VERSION"; fi; \
 		LUA_VERSION=$$(lua -e 'local b = require("build.bitn"); print(b.version())' 2>/dev/null || echo "test failed"); \
 		if [ "$$LUA_VERSION" = "$$VERSION" ]; then \
 			echo "Version correctly set to: $$VERSION"; \
@@ -122,7 +149,7 @@ format:
 		echo "Running stylua..."; \
 		stylua --indent-type Spaces --column-width 120 --line-endings Unix \
 			--indent-width 2 --quote-style AutoPreferDouble \
-			src/ 2>/dev/null; \
+			src/ test/ bench/ 2>/dev/null; \
 	else \
 		echo "stylua not found. Install with: make install-deps"; \
 		exit 1; \
@@ -135,7 +162,7 @@ format-check:
 		echo "Running stylua check..."; \
 		stylua --check --indent-type Spaces --column-width 120 --line-endings Unix \
 			--indent-width 2 --quote-style AutoPreferDouble \
-			src/; \
+			src/ test/ bench/; \
 	else \
 		echo "stylua not found. Install with: make install-deps"; \
 		exit 1; \
@@ -146,7 +173,7 @@ format-check:
 lint:
 	@if command -v luacheck >/dev/null 2>&1; then \
 		echo "Running luacheck..."; \
-		luacheck src/; \
+		luacheck src/ test/ bench/; \
 	else \
 		echo "luacheck not found. Install with: make install-deps"; \
 		exit 1; \
@@ -187,6 +214,7 @@ help:
 	@echo "  make test-<name>        - Run specific test (e.g., make test-bit32)"
 	@echo "  make test-matrix        - Run tests across all Lua versions"
 	@echo "  make test-matrix-<name> - Run specific test across all Lua versions"
+	@echo "  make test-bundle        - Run the tests against the built files (after make build)"
 	@echo ""
 	@echo "Benchmarking:"
 	@echo "  make bench               - Run all benchmarks"
@@ -195,7 +223,7 @@ help:
 	@echo "  make bench-matrix-<name> - Run specific benchmark across all Lua versions"
 	@echo ""
 	@echo "Building:"
-	@echo "  make build              - Build single-file distribution"
+	@echo "  make build              - Build build/bitn.lua and the with-tests build/bitn-tests.lua"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make check              - Run format-check, lint, and typecheck"

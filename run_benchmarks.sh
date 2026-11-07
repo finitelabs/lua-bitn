@@ -42,7 +42,7 @@ echo
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Add repository root to Lua's package path
-lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$LUA_PATH"
+lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/bench/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
 default_modules=("bit16" "bit32" "bit64")
@@ -118,16 +118,15 @@ run_benchmark() {
 run_module_benchmark() {
   local module_name="$1"
   local module_key="$2"
-  local lua_module="$3"
   run_benchmark "$module_name" "$module_key" "
-    require('$lua_module').benchmark()
+    dofile('$script_dir/bench/bench_$module_key.lua')()
   "
 }
 
 # Run benchmarks
-run_module_benchmark "16-bit Operations" "bit16" "bitn.bit16"
-run_module_benchmark "32-bit Operations" "bit32" "bitn.bit32"
-run_module_benchmark "64-bit Operations" "bit64" "bitn.bit64"
+run_module_benchmark "16-bit Operations" "bit16"
+run_module_benchmark "32-bit Operations" "bit32"
+run_module_benchmark "64-bit Operations" "bit64"
 
 completed_count=${#completed_modules[@]}
 failed_count=${#failed_modules[@]}

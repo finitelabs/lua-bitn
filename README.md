@@ -13,7 +13,8 @@ LuaJIT.
 - **Portable**: Runs on any Lua interpreter (5.1+)
 - **Complete**: Full bitwise operations API for 16-bit, 32-bit, and 64-bit integers
 - **Byte Conversions**: Big-endian and little-endian byte string conversions
-- **Well-tested**: Comprehensive self-tests with embedded test vectors
+- **Well-tested**: Test vectors for every operation, run against the source and
+  the built file
 
 ## Installation
 
@@ -25,6 +26,14 @@ cd lua-bitn
 ```
 
 Add the `src` directory to your Lua path, or copy the files to your project.
+
+Each release also publishes two single files:
+
+- `bitn.lua`: the library alone. bitn has no dependencies, so this file is
+  complete on its own.
+- `bitn-tests.lua`: the library plus its tests and benchmarks, for running them
+  where the library runs. `dofile("bitn-tests.lua")` returns the library with
+  `selftest()` and `benchmark()` added.
 
 ## Usage
 
@@ -121,6 +130,7 @@ make test                # Run all tests
 make test-bit32          # Run specific module tests
 make test-matrix         # Run tests across all Lua versions
 make test-matrix-bit32   # Run specific module across all Lua versions
+make build test-bundle   # Run the tests against the built files
 
 # Or use scripts directly with custom Lua binary
 LUA_BINARY=lua5.1 ./run_tests.sh
@@ -151,7 +161,7 @@ make typecheck           # Check annotations with lua-language-server
 ### Building
 
 ```bash
-make build               # Build single-file distribution (build/bitn.lua)
+make build               # Build build/bitn.lua and build/bitn-tests.lua
 make clean               # Remove generated files
 ```
 
