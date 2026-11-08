@@ -226,10 +226,10 @@ loading from source. `test-bundle` then runs the with-tests build's own
 `selftest()`. CI runs both on every interpreter in the matrix, against the
 files the build job made.
 
-`make test-matrix` runs luaenv's `5.1.5 5.2.4 5.3.6 5.4.9 5.5.1 luajit-2.0-dev
-luajit-2.1-dev`, the versions CI tests. The 5.4.9 and 5.5.1 builds need a
-lua-build plugin with their definitions (upstream cehoffman/lua-build has had
-them since August 2026).
+`make test-matrix` runs luaenv's `5.1.5 5.2.4 5.3.6 5.4.9 5.5.1 luajit-2.1-dev`,
+the versions CI tests apart from LuaJIT 2.0, which has no arm64 port and so runs
+in CI only. The 5.4.9 and 5.5.1 builds need a lua-build plugin with their
+definitions (upstream cehoffman/lua-build has had them since August 2026).
 
 ## Benchmarking
 
