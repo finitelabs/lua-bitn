@@ -2,7 +2,7 @@
 --- Portable bitwise operations library with automatic optimization.
 --- This library provides standalone, version-agnostic implementations of
 --- bitwise operations for 16-bit, 32-bit, and 64-bit integers. It works
---- across Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero external dependencies.
+--- across Lua 5.1, 5.2, 5.3, 5.4, 5.5, and LuaJIT with zero external dependencies.
 --- Automatically uses native bit operations when available for optimal performance.
 ---
 --- @usage

@@ -226,9 +226,10 @@ loading from source. `test-bundle` then runs the with-tests build's own
 `selftest()`. CI runs both on every interpreter in the matrix, against the
 files the build job made.
 
-`make test-matrix` pins luaenv `5.1.5 5.2.4 5.3.6 5.4.8 luajit-2.1-dev` locally.
-CI additionally covers **Lua 5.5** and **LuaJIT 2.0**, so a green local matrix is
-a weaker signal than a green CI one.
+`make test-matrix` runs luaenv's `5.1.5 5.2.4 5.3.6 5.4.9 5.5.1 luajit-2.0-dev
+luajit-2.1-dev`, the versions CI tests. The 5.4.9 and 5.5.1 builds need a
+lua-build plugin with their definitions (upstream cehoffman/lua-build has had
+them since August 2026).
 
 ## Benchmarking
 
